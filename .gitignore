@@ -401,3 +401,6 @@ Temporary Items
 dist
 .webpack
 .serverless/**/*.zip
+
+/src/generated/prisma
+**/skills
