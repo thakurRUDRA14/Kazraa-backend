@@ -84,7 +84,7 @@ CREATE TABLE "StoreSetting" (
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
-    "firstName" TEXT NOT NULL,
+    "firstName" TEXT,
     "lastName" TEXT,
     "email" TEXT NOT NULL,
     "phone" TEXT NOT NULL,

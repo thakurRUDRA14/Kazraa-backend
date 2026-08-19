@@ -5,9 +5,7 @@ describe('PostgresService', () => {
   let service: PostgresService;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [PostgresService],
-    }).compile();
+    const module: TestingModule = await Test.createTestingModule({ providers: [PostgresService] }).compile();
 
     service = module.get<PostgresService>(PostgresService);
   });
