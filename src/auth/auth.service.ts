@@ -3,7 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { TokenService } from './services/token.service';
-import { RegisterUserDto } from './dto/register-user.dto';
+import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 
 @Injectable()
@@ -13,8 +13,8 @@ export class AuthService {
     private readonly tokenService: TokenService,
   ) { }
 
-  async register(registerUserDto: RegisterUserDto): Promise<AuthResponseDto> {
-    const { email, phone, password } = registerUserDto;
+  async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
+    const { email, phone, password } = registerDto;
 
     // 1. Check whether email already exists
     const existingEmail = await this.usersService.findByEmail(email);
