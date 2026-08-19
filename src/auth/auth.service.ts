@@ -1,10 +1,11 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { TokenService } from './services/token.service';
 import { RegisterDto } from './dto/register.dto';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { LogInDto } from './dto/login.dto';
+import { AuthResponseDto, AuthTokensResponseDto } from './dto/auth-response.dto';
 
 @Injectable()
 export class AuthService {
@@ -71,5 +72,36 @@ export class AuthService {
 
       throw error;
     }
+  }
+
+  async logIn(logInDto: LogInDto): Promise<AuthTokensResponseDto> {
+    const { identifier, password } = logInDto;
+
+    const user = await this.usersService.findByEmailOrPhone(identifier);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user.password,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const accessToken = await this.tokenService.generateAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    const refreshToken = await this.tokenService.generateRefreshToken({ sub: user.id, email: user.email, role: user.role });
+    return {
+      accessToken,
+      refreshToken,
+    };
   }
 }

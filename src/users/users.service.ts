@@ -17,6 +17,17 @@ export class UsersService {
     });
   }
 
+  async findByEmailOrPhone(identifier: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: identifier },
+          { phone: identifier },
+        ],
+      },
+    });
+  }
+
   async createUser(data: {
     email: string;
     phone: string;
