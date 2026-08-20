@@ -55,6 +55,14 @@ export class AuthService {
           this.tokenService.generateRefreshToken(payload),
         ]);
 
+      const refreshTokenExpiresAt = this.tokenService.getRefreshTokenExpiration();
+
+      await this.tokenService.storeRefreshToken(
+        user.id,
+        refreshToken,
+        refreshTokenExpiresAt,
+      );
+
       // 6. Return response
       return {
         message: 'User registered successfully',
@@ -96,7 +104,21 @@ export class AuthService {
       role: user.role,
     });
 
-    const refreshToken = await this.tokenService.generateRefreshToken({ sub: user.id, email: user.email, role: user.role });
+    const refreshToken = await this.tokenService.generateRefreshToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    const refreshTokenExpiresAt =
+      this.tokenService.getRefreshTokenExpiration();
+
+    await this.tokenService.storeRefreshToken(
+      user.id,
+      refreshToken,
+      refreshTokenExpiresAt,
+    );
+
     return {
       accessToken,
       refreshToken,
@@ -109,7 +131,18 @@ export class AuthService {
     try {
       payload = await this.tokenService.verifyRefreshToken(refreshToken);
     } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException(
+        'Invalid or expired refresh token',
+      );
+    }
+
+    const storedUserId =
+      await this.tokenService.validateStoredRefreshToken(
+        refreshToken,
+      );
+
+    if (storedUserId !== payload.sub) {
+      throw new UnauthorizedException('Invalid refresh token');
     }
 
     const user = await this.usersService.findById(payload.sub);
@@ -118,14 +151,23 @@ export class AuthService {
       throw new UnauthorizedException('User no longer exists');
     }
 
-    const accessToken = await this.tokenService.generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const accessToken =
+      await this.tokenService.generateAccessToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      });
 
     return {
       accessToken,
     };
+  }
+
+  async logout(refreshToken?: string): Promise<void> {
+    if (!refreshToken) {
+      return;
+    }
+
+    await this.tokenService.revokeRefreshToken(refreshToken);
   }
 }

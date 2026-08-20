@@ -190,6 +190,22 @@ model StoreSetting {
   updatedAt DateTime @updatedAt
 }
 
+model RefreshToken {
+  id        String @id @default(uuid())
+  tokenHash String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
 // USER
 model User {
   id String @id @default(cuid())
@@ -214,6 +230,7 @@ model User {
 
   resetToken       String?
   resetTokenExpiry DateTime?
+  refreshTokens    RefreshToken[]
 
   addresses Address[]
   carts     Cart[]
