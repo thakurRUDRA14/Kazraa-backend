@@ -28,6 +28,14 @@ export class UsersService {
     });
   }
 
+  async findById(id: string) {
+    return this.prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+  }
+
   async createUser(data: {
     email: string;
     phone: string;

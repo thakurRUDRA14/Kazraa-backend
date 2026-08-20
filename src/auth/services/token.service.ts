@@ -37,4 +37,12 @@ export class TokenService {
             ),
         });
     }
+
+    async verifyRefreshToken(token: string) {
+        return this.jwtService.verifyAsync(token, {
+            secret: this.configService.getOrThrow<string>(
+                'JWT_REFRESH_SECRET',
+            ),
+        });
+    }
 }

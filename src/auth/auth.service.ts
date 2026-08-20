@@ -5,7 +5,7 @@ import { UsersService } from '../users/users.service';
 import { TokenService } from './services/token.service';
 import { RegisterDto } from './dto/register.dto';
 import { LogInDto } from './dto/login.dto';
-import { AuthResponseDto, AuthTokensResponseDto } from './dto/auth-response.dto';
+import { AuthTokens, RegisterAuthResult } from './types/auth.types';
 
 @Injectable()
 export class AuthService {
@@ -14,7 +14,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
   ) { }
 
-  async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
+  async register(registerDto: RegisterDto): Promise<RegisterAuthResult> {
     const { email, phone, password } = registerDto;
 
     // 1. Check whether email already exists
@@ -59,10 +59,8 @@ export class AuthService {
       return {
         message: 'User registered successfully',
         user,
-        tokens: {
-          accessToken,
-          refreshToken,
-        },
+        accessToken,
+        refreshToken,
       };
     } catch (error) {
       // Handle race condition / unique constraint
@@ -74,7 +72,7 @@ export class AuthService {
     }
   }
 
-  async logIn(logInDto: LogInDto): Promise<AuthTokensResponseDto> {
+  async logIn(logInDto: LogInDto): Promise<AuthTokens> {
     const { identifier, password } = logInDto;
 
     const user = await this.usersService.findByEmailOrPhone(identifier);
@@ -102,6 +100,32 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+    };
+  }
+
+  async refreshAccessToken(refreshToken: string) {
+    let payload;
+
+    try {
+      payload = await this.tokenService.verifyRefreshToken(refreshToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const user = await this.usersService.findById(payload.sub);
+
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    const accessToken = await this.tokenService.generateAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    return {
+      accessToken,
     };
   }
 }

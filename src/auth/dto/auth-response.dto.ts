@@ -1,3 +1,5 @@
+// import { UserRole } from '@prisma/client';
+
 export class AuthUserResponseDto {
   id!: string;
   email!: string;
@@ -8,13 +10,12 @@ export class AuthUserResponseDto {
   createdAt!: Date;
 }
 
-export class AuthTokensResponseDto {
-  accessToken!: string;
-  refreshToken!: string;
-}
-
 export class AuthResponseDto {
   message!: string;
   user!: AuthUserResponseDto;
-  tokens!: AuthTokensResponseDto;
+  accessToken!: string;
+}
+
+export class AccessTokenResponseDto {
+  accessToken!: string;
 }

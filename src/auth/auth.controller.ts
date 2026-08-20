@@ -1,6 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Req, UnauthorizedException, Res } from '@nestjs/common';
+import { type Response, type Request } from 'express';
 import { AuthService } from './auth.service';
-import { AuthResponseDto, AuthTokensResponseDto } from './dto/auth-response.dto';
+import { AccessTokenResponseDto, AuthResponseDto } from './dto/auth-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LogInDto } from './dto/login.dto';
 
@@ -12,14 +13,59 @@ export class AuthController {
   @Post('register')
   async register(
     @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponseDto> {
-    return this.authService.register(registerDto);
+    const {
+      message,
+      user,
+      accessToken,
+      refreshToken,
+    } = await this.authService.register(registerDto);
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/auth',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return {
+      message,
+      user,
+      accessToken,
+    };
   }
 
-  @Post('logIn')
+  @Post('login')
   async logIn(
     @Body() logInDto: LogInDto,
-  ): Promise<AuthTokensResponseDto> {
-    return this.authService.logIn(logInDto);
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AccessTokenResponseDto> {
+    const { accessToken, refreshToken } =
+      await this.authService.logIn(logInDto);
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/auth',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return {
+      accessToken,
+    };
+  }
+
+  @Post('refresh')
+  async refresh(@Req() req: Request) {
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token not found');
+    }
+
+    return this.authService.refreshAccessToken(refreshToken);
   }
 }
