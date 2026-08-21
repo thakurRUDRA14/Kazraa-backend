@@ -228,6 +228,9 @@ model User {
 
   lastLoginAt DateTime?
 
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   resetToken       String?
   resetTokenExpiry DateTime?
   refreshTokens    RefreshToken[]
@@ -241,9 +244,8 @@ model User {
   defaultAddressId String?  @unique
   defaultAddress   Address? @relation("DefaultAddress", fields: [defaultAddressId], references: [id], onDelete: SetNull)
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([email])
   @@index([phone])

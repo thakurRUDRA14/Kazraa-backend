@@ -1,25 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PostgresService) { }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({
-      where: { email },
+    return this.prisma.user.findFirst({
+      where: {
+        email,
+        isDeleted: false,
+      },
     });
   }
 
   async findByPhone(phone: string) {
-    return this.prisma.user.findUnique({
-      where: { phone },
+    return this.prisma.user.findFirst({
+      where: {
+        phone,
+        isDeleted: false,
+      },
     });
   }
 
   async findByEmailOrPhone(identifier: string) {
     return this.prisma.user.findFirst({
       where: {
+        isDeleted: false,
         OR: [
           { email: identifier },
           { phone: identifier },
@@ -29,9 +37,10 @@ export class UsersService {
   }
 
   async findById(id: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: {
         id,
+        isDeleted: false,
       },
     });
   }
@@ -53,5 +62,87 @@ export class UsersService {
         createdAt: true,
       },
     });
+  }
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  async updateMe(userId: string, dto: UpdateUserDto) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+        isDeleted: false,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.prisma.user.update({
+      where: {
+        id: userId,
+        isDeleted: false,
+      },
+      data: dto,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async deleteMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+
+    return {
+      message: 'Account deleted successfully',
+    };
   }
 }

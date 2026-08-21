@@ -14,7 +14,9 @@ import { PostgresModule } from './database/postgres/postgres.module';
     load: [appConfig, authConfig],
   }),
     PostgresModule,
-    UsersModule, AuthModule],
+    UsersModule,
+    AuthModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
