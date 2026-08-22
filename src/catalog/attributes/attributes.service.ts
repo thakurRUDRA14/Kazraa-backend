@@ -8,6 +8,8 @@ import { PostgresService } from '../../database/postgres/postgres.service';
 
 import { CreateAttributeDto } from './dto/create-attribute.dto';
 import { UpdateAttributeDto } from './dto/update-attribute.dto';
+import { CreateAttributeOptionDto } from './dto/create-attribute-option.dto';
+import { UpdateAttributeOptionDto } from './dto/update-attribute-option.dto';
 
 @Injectable()
 export class AttributesService {
@@ -199,6 +201,117 @@ export class AttributesService {
             data: {
                 deletedAt: new Date(),
                 isActive: false,
+            },
+        });
+    }
+
+    // POST /catalog/attributes/:attributeId/options
+    async createOption(
+        attributeId: string,
+        createOptionDto: CreateAttributeOptionDto,
+    ) {
+        const attribute = await this.prisma.attribute.findUnique({
+            where: {
+                id: attributeId,
+            },
+        });
+
+        if (!attribute) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        const existingOption =
+            await this.prisma.attributeOption.findUnique({
+                where: {
+                    attributeId_value: {
+                        attributeId,
+                        value: createOptionDto.value,
+                    },
+                },
+            });
+
+        if (existingOption) {
+            throw new ConflictException(
+                'An option with this value already exists for this attribute',
+            );
+        }
+
+        return this.prisma.attributeOption.create({
+            data: {
+                attributeId,
+                label: createOptionDto.label,
+                value: createOptionDto.value,
+                sortOrder: createOptionDto.sortOrder ?? 0,
+                isActive: createOptionDto.isActive ?? true,
+            },
+        });
+    }
+
+    // PATCH /catalog/attributes/:attributeId/options/:optionId
+    async updateOption(
+        attributeId: string,
+        optionId: string,
+        updateOptionDto: UpdateAttributeOptionDto,
+    ) {
+        const option = await this.prisma.attributeOption.findFirst({
+            where: {
+                id: optionId,
+                attributeId,
+            },
+        });
+
+        if (!option) {
+            throw new NotFoundException('Attribute option not found');
+        }
+
+        if (
+            updateOptionDto.value &&
+            updateOptionDto.value !== option.value
+        ) {
+            const duplicateOption =
+                await this.prisma.attributeOption.findUnique({
+                    where: {
+                        attributeId_value: {
+                            attributeId,
+                            value: updateOptionDto.value,
+                        },
+                    },
+                });
+
+            if (duplicateOption) {
+                throw new ConflictException(
+                    'An option with this value already exists for this attribute',
+                );
+            }
+        }
+
+        return this.prisma.attributeOption.update({
+            where: {
+                id: optionId,
+            },
+            data: updateOptionDto,
+        });
+    }
+
+    // DELETE /catalog/attributes/:attributeId/options/:optionId
+    async removeOption(
+        attributeId: string,
+        optionId: string,
+    ) {
+        const option = await this.prisma.attributeOption.findFirst({
+            where: {
+                id: optionId,
+                attributeId,
+            },
+        });
+
+        if (!option) {
+            throw new NotFoundException('Attribute option not found');
+        }
+
+        return this.prisma.attributeOption.delete({
+            where: {
+                id: optionId,
             },
         });
     }
