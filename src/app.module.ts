@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { appConfig, authConfig } from './config';
 import { PostgresModule } from './database/postgres/postgres.module';
+import { CatalogModule } from './catalog/catalog.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -16,6 +17,7 @@ import { PostgresModule } from './database/postgres/postgres.module';
     PostgresModule,
     UsersModule,
     AuthModule,
+    CatalogModule,
   ],
   controllers: [AppController],
   providers: [AppService],
