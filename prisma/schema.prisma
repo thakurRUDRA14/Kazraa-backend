@@ -421,22 +421,39 @@ model ProductImage {
   @@index([productId])
 }
 
-// SIZE MASTER
+model SizeType {
+  id   String @id @default(cuid())
+  name String @unique
+
+  sizes Size[]
+
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Size {
   id String @id @default(cuid())
 
-  name String @unique
+  sizeTypeId String
+  sizeType   SizeType @relation(fields: [sizeTypeId], references: [id])
 
-  shortCode String? @unique
+  name      String
+  shortCode String?
 
-  sortOrder Int @default(0)
-
-  isActive Boolean @default(true)
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
 
   productSizes ProductSize[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([sizeTypeId, name])
+  @@index([sizeTypeId])
 }
 
 // PRODUCT SIZE (SELLABLE SKU)

@@ -1,12 +1,4 @@
-import {
-    IsBoolean,
-    IsInt,
-    IsNotEmpty,
-    IsOptional,
-    IsString,
-    MaxLength,
-    Min,
-} from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateSizeDto {
     @IsString()
@@ -23,6 +15,9 @@ export class CreateSizeDto {
     @Min(0)
     @IsOptional()
     sortOrder?: number;
+
+    @IsString()
+    sizeTypeId!: string;
 
     @IsBoolean()
     @IsOptional()

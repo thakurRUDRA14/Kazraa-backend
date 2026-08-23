@@ -17,19 +17,40 @@ export class SizesService {
     async create(createSizeDto: CreateSizeDto) {
         const {
             name,
+            sizeTypeId,
             shortCode,
             sortOrder,
             isActive,
         } = createSizeDto;
 
-        const existingSize = await this.prisma.size.findFirst({
-            where: {
-                OR: [
-                    { name },
-                    ...(shortCode ? [{ shortCode }] : []),
-                ],
-            },
-        });
+        // Check size type
+        const sizeType =
+            await this.prisma.sizeType.findUnique({
+                where: {
+                    id: sizeTypeId,
+                },
+            });
+
+        if (!sizeType) {
+            throw new NotFoundException(
+                'Size type not found',
+            );
+        }
+
+        // Check duplicate size
+
+        const existingSize =
+            await this.prisma.size.findFirst({
+                where: {
+                    sizeTypeId,
+                    OR: [
+                        { name },
+                        ...(shortCode
+                            ? [{ shortCode }]
+                            : []),
+                    ],
+                },
+            });
 
         if (existingSize) {
             if (existingSize.name === name) {
@@ -41,19 +62,34 @@ export class SizesService {
             }
         }
 
+        // Create
         return this.prisma.size.create({
             data: {
                 name,
+                sizeTypeId,
                 shortCode,
                 sortOrder: sortOrder ?? 0,
                 isActive: isActive ?? true,
+            },
+            include: {
+                sizeType: true,
             },
         });
     }
 
     // GET /catalog/sizes
-    async findAll() {
+    async findAll(sizeTypeId?: string) {
         return this.prisma.size.findMany({
+            where: sizeTypeId
+                ? {
+                    sizeTypeId,
+                }
+                : undefined,
+
+            include: {
+                sizeType: true,
+            },
+
             orderBy: [
                 {
                     sortOrder: 'asc',
@@ -67,9 +103,15 @@ export class SizesService {
 
     // GET /catalog/sizes/:id
     async findOne(id: string) {
-        const size = await this.prisma.size.findUnique({
-            where: { id },
-        });
+        const size =
+            await this.prisma.size.findUnique({
+                where: {
+                    id,
+                },
+                include: {
+                    sizeType: true,
+                },
+            });
 
         if (!size) {
             throw new NotFoundException('Size not found');
@@ -83,62 +125,105 @@ export class SizesService {
         id: string,
         updateSizeDto: UpdateSizeDto,
     ) {
-        const existingSize = await this.prisma.size.findUnique({
-            where: { id },
-        });
+        const existingSize =
+            await this.prisma.size.findUnique({
+                where: {
+                    id,
+                },
+            });
 
         if (!existingSize) {
             throw new NotFoundException('Size not found');
         }
 
-        const { name, shortCode } = updateSizeDto;
+        const {
+            name,
+            sizeTypeId,
+            shortCode,
+        } = updateSizeDto;
 
-        if (name || shortCode) {
-            const duplicateSize = await this.prisma.size.findFirst({
-                where: {
-                    OR: [
-                        ...(name ? [{ name }] : []),
-                        ...(shortCode ? [{ shortCode }] : []),
-                    ],
-                    NOT: {
-                        id,
+        // Determine final size type
+
+        const finalSizeTypeId =
+            sizeTypeId ?? existingSize.sizeTypeId;
+
+        // Check size type
+        if (sizeTypeId) {
+            const sizeType =
+                await this.prisma.sizeType.findUnique({
+                    where: {
+                        id: sizeTypeId,
                     },
-                },
-            });
+                });
+
+            if (!sizeType) {
+                throw new NotFoundException(
+                    'Size type not found',
+                );
+            }
+        }
+
+        // Check duplicate
+        if (name || shortCode || sizeTypeId) {
+            const duplicateSize =
+                await this.prisma.size.findFirst({
+                    where: {
+                        sizeTypeId: finalSizeTypeId,
+
+                        OR: [
+                            ...(name
+                                ? [{ name }]
+                                : []),
+
+                            ...(shortCode
+                                ? [{ shortCode }]
+                                : []),
+                        ],
+
+                        NOT: {
+                            id,
+                        },
+                    },
+                });
 
             if (duplicateSize) {
                 if (name && duplicateSize.name === name) {
-                    throw new ConflictException('A size with this name already exists');
+                    throw new ConflictException('A size with this name already exists in this size type');
                 }
 
                 if (shortCode && duplicateSize.shortCode === shortCode) {
-                    throw new ConflictException('A size with this short code already exists');
+                    throw new ConflictException('A size with this short code already exists in this size type');
                 }
             }
         }
 
+        // Update
         return this.prisma.size.update({
             where: {
                 id,
             },
             data: updateSizeDto,
+            include: {
+                sizeType: true,
+            },
         });
     }
 
     // DELETE /catalog/sizes/:id
     async remove(id: string) {
-        const size = await this.prisma.size.findUnique({
-            where: {
-                id,
-            },
-            include: {
-                _count: {
-                    select: {
-                        productSizes: true,
+        const size =
+            await this.prisma.size.findUnique({
+                where: {
+                    id,
+                },
+                include: {
+                    _count: {
+                        select: {
+                            productSizes: true,
+                        },
                     },
                 },
-            },
-        });
+            });
 
         if (!size) {
             throw new NotFoundException('Size not found');
