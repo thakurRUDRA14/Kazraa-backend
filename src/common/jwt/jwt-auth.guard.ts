@@ -7,11 +7,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
+import { UserRole } from '../../../generated/prisma/enums';
 
 export interface JwtPayload {
     sub: string;
     email: string;
-    role: string;
+    role: UserRole;
 }
 
 @Injectable()
