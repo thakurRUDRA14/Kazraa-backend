@@ -1,12 +1,12 @@
-import { IsEmail, IsNotEmpty, IsString, IsStrongPassword } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsPhoneNumber, IsStrongPassword } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
   @IsNotEmpty()
   email!: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsPhoneNumber()
   phone!: string;
 
   @IsStrongPassword({
