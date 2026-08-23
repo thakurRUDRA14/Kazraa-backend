@@ -1,5 +1,5 @@
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
-import { AttributeType } from '../../../../generated/prisma/client';
+import { AttributeType } from '../../../../generated/prisma/enums';
 
 export class CreateAttributeDto {
     @IsString()
