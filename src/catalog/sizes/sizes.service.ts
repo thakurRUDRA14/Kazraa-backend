@@ -25,20 +25,18 @@ export class SizesService {
 
         // Check size type
         const sizeType =
-            await this.prisma.sizeType.findUnique({
+            await this.prisma.sizeType.findFirst({
                 where: {
                     id: sizeTypeId,
+                    deletedAt: null
                 },
             });
 
         if (!sizeType) {
-            throw new NotFoundException(
-                'Size type not found',
-            );
+            throw new NotFoundException('Size type not found');
         }
 
         // Check duplicate size
-
         const existingSize =
             await this.prisma.size.findFirst({
                 where: {
@@ -80,11 +78,12 @@ export class SizesService {
     // GET /catalog/sizes
     async findAll(sizeTypeId?: string) {
         return this.prisma.size.findMany({
-            where: sizeTypeId
-                ? {
+            where: {
+                deletedAt: null,
+                ...(sizeTypeId && {
                     sizeTypeId,
-                }
-                : undefined,
+                }),
+            },
 
             include: {
                 sizeType: true,
@@ -104,9 +103,10 @@ export class SizesService {
     // GET /catalog/sizes/:id
     async findOne(id: string) {
         const size =
-            await this.prisma.size.findUnique({
+            await this.prisma.size.findFirst({
                 where: {
                     id,
+                    deletedAt: null,
                 },
                 include: {
                     sizeType: true,
@@ -126,9 +126,10 @@ export class SizesService {
         updateSizeDto: UpdateSizeDto,
     ) {
         const existingSize =
-            await this.prisma.size.findUnique({
+            await this.prisma.size.findFirst({
                 where: {
                     id,
+                    deletedAt: null
                 },
             });
 
@@ -144,22 +145,20 @@ export class SizesService {
 
         // Determine final size type
 
-        const finalSizeTypeId =
-            sizeTypeId ?? existingSize.sizeTypeId;
+        const finalSizeTypeId = sizeTypeId ?? existingSize.sizeTypeId;
 
         // Check size type
         if (sizeTypeId) {
             const sizeType =
-                await this.prisma.sizeType.findUnique({
+                await this.prisma.sizeType.findFirst({
                     where: {
                         id: sizeTypeId,
+                        deletedAt: null,
                     },
                 });
 
             if (!sizeType) {
-                throw new NotFoundException(
-                    'Size type not found',
-                );
+                throw new NotFoundException('Size type not found');
             }
         }
 
@@ -201,6 +200,7 @@ export class SizesService {
         return this.prisma.size.update({
             where: {
                 id,
+                deletedAt: null,
             },
             data: updateSizeDto,
             include: {
@@ -212,9 +212,10 @@ export class SizesService {
     // DELETE /catalog/sizes/:id
     async remove(id: string) {
         const size =
-            await this.prisma.size.findUnique({
+            await this.prisma.size.findFirst({
                 where: {
                     id,
+                    deletedAt: null,
                 },
                 include: {
                     _count: {
@@ -238,8 +239,14 @@ export class SizesService {
             throw new ConflictException('Cannot delete a size that is being used by products');
         }
 
-        return this.prisma.size.delete({
-            where: { id },
+        return this.prisma.size.update({
+            where: {
+                id,
+            },
+            data: {
+                isActive: false,
+                deletedAt: new Date(),
+            },
         });
     }
 }
