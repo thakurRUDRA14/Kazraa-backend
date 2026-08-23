@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PostgresService } from '../../database/postgres/postgres.service';
 import { createHash } from 'node:crypto';
 import ms, { StringValue } from 'ms';
+import { UserRole } from '../../../generated/prisma/enums';
 
 @Injectable()
 export class TokenService {
@@ -22,7 +23,7 @@ export class TokenService {
     async generateAccessToken(payload: {
         sub: string;
         email: string;
-        role: string;
+        role: UserRole;
     }): Promise<string> {
         return this.jwtService.signAsync(payload, {
             secret: this.configService.getOrThrow<string>('auth.accessTokenSecret'),
@@ -36,7 +37,7 @@ export class TokenService {
     async generateRefreshToken(payload: {
         sub: string;
         email: string;
-        role: string;
+        role: UserRole;
     }): Promise<string> {
         return this.jwtService.signAsync(payload, {
             secret: this.configService.getOrThrow<string>('auth.refreshTokenSecret'),

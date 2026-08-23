@@ -1,4 +1,4 @@
-// import { UserRole } from '@prisma/client';
+import { UserRole } from '../../../generated/prisma/client';
 
 export class AuthUserResponseDto {
   id!: string;
@@ -6,7 +6,7 @@ export class AuthUserResponseDto {
   phone!: string;
   firstName!: string | null;
   lastName!: string | null;
-  role!: string;
+  role!: UserRole;
   createdAt!: Date;
 }
 
