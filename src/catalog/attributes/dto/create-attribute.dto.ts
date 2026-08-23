@@ -23,7 +23,7 @@ export class CreateAttributeDto {
 
     @IsOptional()
     @IsBoolean()
-    isVariant?: boolean;
+    isActive?: boolean;
 
     @IsOptional()
     @IsInt()

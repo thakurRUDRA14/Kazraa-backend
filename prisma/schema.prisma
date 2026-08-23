@@ -507,7 +507,6 @@ model Attribute {
 
   isRequired   Boolean @default(false)
   isFilterable Boolean @default(true)
-  isVariant    Boolean @default(false)
 
   sortOrder Int @default(0)
 

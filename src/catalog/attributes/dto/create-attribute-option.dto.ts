@@ -6,11 +6,6 @@ export class CreateAttributeOptionDto {
     @MaxLength(100)
     label!: string;
 
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(100)
-    value!: string;
-
     @IsInt()
     @Min(0)
     @IsOptional()

@@ -1,8 +1,4 @@
-import {
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { PostgresService } from '../../database/postgres/postgres.service';
 
@@ -18,7 +14,7 @@ export class AttributesService {
 
     // POST /catalog/attributes
     async create(createAttributeDto: CreateAttributeDto) {
-        const { name, type, description, isRequired, isFilterable, isVariant, sortOrder } = createAttributeDto;
+        const { name, type, description, isRequired, isFilterable, isActive, sortOrder } = createAttributeDto;
         const slug = generateSlug(name);
 
         const existingName = await this.prisma.attribute.findUnique({
@@ -53,7 +49,7 @@ export class AttributesService {
                 description,
                 isRequired,
                 isFilterable,
-                isVariant,
+                isActive: isActive ?? true,
                 sortOrder,
             },
         });
@@ -200,9 +196,10 @@ export class AttributesService {
         attributeId: string,
         createOptionDto: CreateAttributeOptionDto,
     ) {
-        const attribute = await this.prisma.attribute.findUnique({
+        const attribute = await this.prisma.attribute.findFirst({
             where: {
                 id: attributeId,
+                deletedAt: null,
             },
         });
 
@@ -210,27 +207,27 @@ export class AttributesService {
             throw new NotFoundException('Attribute not found');
         }
 
+        const value = generateSlug(createOptionDto.label);
+
         const existingOption =
             await this.prisma.attributeOption.findUnique({
                 where: {
                     attributeId_value: {
                         attributeId,
-                        value: createOptionDto.value,
+                        value,
                     },
                 },
             });
 
         if (existingOption) {
-            throw new ConflictException(
-                'An option with this value already exists for this attribute',
-            );
+            throw new ConflictException('An option with this label already exists for this attribute');
         }
 
         return this.prisma.attributeOption.create({
             data: {
                 attributeId,
                 label: createOptionDto.label,
-                value: createOptionDto.value,
+                value,
                 sortOrder: createOptionDto.sortOrder ?? 0,
                 isActive: createOptionDto.isActive ?? true,
             },
@@ -254,24 +251,30 @@ export class AttributesService {
             throw new NotFoundException('Attribute option not found');
         }
 
+        let value = option.value;
+
+        // Generate a new value only when label changes
         if (
-            updateOptionDto.value &&
-            updateOptionDto.value !== option.value
+            updateOptionDto.label !== undefined &&
+            updateOptionDto.label !== option.label
         ) {
+            value = generateSlug(updateOptionDto.label);
+
             const duplicateOption =
                 await this.prisma.attributeOption.findUnique({
                     where: {
                         attributeId_value: {
                             attributeId,
-                            value: updateOptionDto.value,
+                            value,
                         },
                     },
                 });
 
-            if (duplicateOption) {
-                throw new ConflictException(
-                    'An option with this value already exists for this attribute',
-                );
+            if (
+                duplicateOption &&
+                duplicateOption.id !== optionId
+            ) {
+                throw new ConflictException('An option with this label already exists for this attribute');
             }
         }
 
@@ -279,9 +282,24 @@ export class AttributesService {
             where: {
                 id: optionId,
             },
-            data: updateOptionDto,
+            data: {
+                ...(updateOptionDto.label !== undefined && {
+                    label: updateOptionDto.label,
+                }),
+
+                value,
+
+                ...(updateOptionDto.sortOrder !== undefined && {
+                    sortOrder: updateOptionDto.sortOrder,
+                }),
+
+                ...(updateOptionDto.isActive !== undefined && {
+                    isActive: updateOptionDto.isActive,
+                }),
+            },
         });
     }
+
 
     // DELETE /catalog/attributes/:attributeId/options/:optionId
     async removeOption(
