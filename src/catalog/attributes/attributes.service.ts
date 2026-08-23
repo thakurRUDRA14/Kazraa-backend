@@ -10,6 +10,7 @@ import { CreateAttributeDto } from './dto/create-attribute.dto';
 import { UpdateAttributeDto } from './dto/update-attribute.dto';
 import { CreateAttributeOptionDto } from './dto/create-attribute-option.dto';
 import { UpdateAttributeOptionDto } from './dto/update-attribute-option.dto';
+import { generateSlug } from '../../common/utils/slug.util';
 
 @Injectable()
 export class AttributesService {
@@ -17,16 +18,8 @@ export class AttributesService {
 
     // POST /catalog/attributes
     async create(createAttributeDto: CreateAttributeDto) {
-        const {
-            name,
-            slug,
-            type,
-            description,
-            isRequired,
-            isFilterable,
-            isVariant,
-            sortOrder,
-        } = createAttributeDto;
+        const { name, type, description, isRequired, isFilterable, isVariant, sortOrder } = createAttributeDto;
+        const slug = generateSlug(name);
 
         const existingName = await this.prisma.attribute.findUnique({
             where: {
@@ -137,45 +130,42 @@ export class AttributesService {
             );
         }
 
+        let slug = existingAttribute.slug;
+
+        // If name is changed, generate a new slug
         if (
             updateAttributeDto.name &&
             updateAttributeDto.name !== existingAttribute.name
         ) {
-            const nameExists = await this.prisma.attribute.findUnique({
+            const newSlug = generateSlug(updateAttributeDto.name);
+
+            // Check whether generated slug already belongs to another attribute
+            const slugExists = await this.prisma.attribute.findFirst({
                 where: {
-                    name: updateAttributeDto.name,
+                    slug: newSlug,
+                    id: {
+                        not: id,
+                    },
                 },
             });
 
-            if (nameExists && nameExists.id !== id) {
+            if (slugExists) {
                 throw new ConflictException(
-                    `Attribute with name "${updateAttributeDto.name}" already exists`,
+                    `An attribute with name "${updateAttributeDto.name}" already exists`,
                 );
             }
-        }
 
-        if (
-            updateAttributeDto.slug &&
-            updateAttributeDto.slug !== existingAttribute.slug
-        ) {
-            const slugExists = await this.prisma.attribute.findUnique({
-                where: {
-                    slug: updateAttributeDto.slug,
-                },
-            });
-
-            if (slugExists && slugExists.id !== id) {
-                throw new ConflictException(
-                    `Attribute with slug "${updateAttributeDto.slug}" already exists`,
-                );
-            }
+            slug = newSlug;
         }
 
         return this.prisma.attribute.update({
             where: {
                 id,
             },
-            data: updateAttributeDto,
+            data: {
+                ...updateAttributeDto,
+                slug,
+            },
         });
     }
 

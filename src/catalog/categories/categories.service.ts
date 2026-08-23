@@ -4,6 +4,7 @@ import { PostgresService } from '../../database/postgres/postgres.service';
 
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { generateSlug } from '../../common/utils/slug.util';
 
 @Injectable()
 export class CategoriesService {
@@ -11,7 +12,8 @@ export class CategoriesService {
 
     // POST /catalog/categories
     async create(createCategoryDto: CreateCategoryDto) {
-        const { name, slug, description, imageUrl, parentId, isActive } = createCategoryDto;
+        const { name, description, imageUrl, parentId, isActive } = createCategoryDto;
+        const slug = generateSlug(name);
 
         // Check duplicate slug
         const existingCategory = await this.prisma.category.findUnique({
@@ -120,26 +122,47 @@ export class CategoriesService {
             throw new NotFoundException('Category not found');
         }
 
-        // If slug is being changed, check uniqueness
+        // Generate new slug when name changes
+        let slug = existingCategory.slug;
+
         if (
-            updateCategoryDto.slug &&
-            updateCategoryDto.slug !== existingCategory.slug
+            updateCategoryDto.name &&
+            updateCategoryDto.name !== existingCategory.name
         ) {
-            const duplicateSlug = await this.prisma.category.findUnique({
+            const newSlug = generateSlug(updateCategoryDto.name);
+
+            const duplicateCategory = await this.prisma.category.findFirst({
                 where: {
-                    slug: updateCategoryDto.slug,
+                    OR: [
+                        {
+                            name: updateCategoryDto.name,
+                        },
+                        {
+                            slug: newSlug,
+                        },
+                    ],
+                    id: {
+                        not: id,
+                    },
+                    deletedAt: null,
                 },
             });
 
-            if (duplicateSlug && duplicateSlug.id !== id) {
-                throw new ConflictException('A category with this slug already exists');
+            if (duplicateCategory) {
+                throw new ConflictException(
+                    'A category with this name already exists',
+                );
             }
+
+            slug = newSlug;
         }
 
         // Validate parent
         if (updateCategoryDto.parentId) {
             if (updateCategoryDto.parentId === id) {
-                throw new ConflictException('A category cannot be its own parent');
+                throw new ConflictException(
+                    'A category cannot be its own parent',
+                );
             }
 
             const parentCategory = await this.prisma.category.findFirst({
@@ -150,7 +173,9 @@ export class CategoriesService {
             });
 
             if (!parentCategory) {
-                throw new NotFoundException('Parent category not found');
+                throw new NotFoundException(
+                    'Parent category not found',
+                );
             }
         }
 
@@ -158,7 +183,10 @@ export class CategoriesService {
             where: {
                 id,
             },
-            data: updateCategoryDto,
+            data: {
+                ...updateCategoryDto,
+                slug,
+            },
             include: {
                 parent: true,
             },

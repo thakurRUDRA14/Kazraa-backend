@@ -13,11 +13,6 @@ export class UpdateProductDto {
 
     @IsString()
     @IsOptional()
-    @MaxLength(220)
-    slug?: string;
-
-    @IsString()
-    @IsOptional()
     @MaxLength(500)
     shortDescription?: string;
 

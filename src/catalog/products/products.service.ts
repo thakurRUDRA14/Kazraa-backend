@@ -19,6 +19,7 @@ import { UpdateProductSizeDto } from './dto/update-product-size.dto';
 
 import { CreateProductAttributeDto } from './dto/create-product-attribute.dto';
 import { UpdateProductAttributeDto } from './dto/update-product-attribute.dto';
+import { generateSlug } from '../../common/utils/slug.util';
 
 @Injectable()
 export class ProductsService {
@@ -31,7 +32,6 @@ export class ProductsService {
         const {
             categoryId,
             name,
-            slug,
             shortDescription,
             description,
             seoTitle,
@@ -47,6 +47,7 @@ export class ProductsService {
         // Check slug
         // --------------------------------
 
+        const slug = generateSlug(name);
         const existingProduct =
             await this.prisma.product.findUnique({
                 where: {
@@ -418,44 +419,42 @@ export class ProductsService {
         id: string,
         updateProductDto: UpdateProductDto,
     ) {
-        const existingProduct =
-            await this.prisma.product.findFirst({
-                where: {
-                    id,
-                    deletedAt: null,
-                },
-            });
+        const existingProduct = await this.prisma.product.findFirst({
+            where: {
+                id,
+                deletedAt: null,
+            },
+        });
 
         if (!existingProduct) {
-            throw new NotFoundException(
-                'Product not found',
-            );
+            throw new NotFoundException('Product not found');
         }
 
+        let slug = existingProduct.slug;
+
         // --------------------------------
-        // Check slug
+        // Generate slug when name changes
         // --------------------------------
 
         if (
-            updateProductDto.slug &&
-            updateProductDto.slug !==
-            existingProduct.slug
+            updateProductDto.name &&
+            updateProductDto.name !== existingProduct.name
         ) {
-            const duplicate =
-                await this.prisma.product.findUnique({
-                    where: {
-                        slug: updateProductDto.slug,
-                    },
-                });
+            const newSlug = generateSlug(updateProductDto.name);
 
-            if (
-                duplicate &&
-                duplicate.id !== id
-            ) {
+            const duplicate = await this.prisma.product.findUnique({
+                where: {
+                    slug: newSlug,
+                },
+            });
+
+            if (duplicate && duplicate.id !== id) {
                 throw new ConflictException(
-                    'A product with this slug already exists',
+                    'A product with this name already exists',
                 );
             }
+
+            slug = newSlug;
         }
 
         // --------------------------------
@@ -464,22 +463,18 @@ export class ProductsService {
 
         if (
             updateProductDto.categoryId &&
-            updateProductDto.categoryId !==
-            existingProduct.categoryId
+            updateProductDto.categoryId !== existingProduct.categoryId
         ) {
-            const category =
-                await this.prisma.category.findFirst({
-                    where: {
-                        id: updateProductDto.categoryId,
-                        deletedAt: null,
-                        isActive: true,
-                    },
-                });
+            const category = await this.prisma.category.findFirst({
+                where: {
+                    id: updateProductDto.categoryId,
+                    deletedAt: null,
+                    isActive: true,
+                },
+            });
 
             if (!category) {
-                throw new NotFoundException(
-                    'Category not found',
-                );
+                throw new NotFoundException('Category not found');
             }
         }
 
@@ -487,7 +482,10 @@ export class ProductsService {
             where: {
                 id,
             },
-            data: updateProductDto,
+            data: {
+                ...updateProductDto,
+                slug,
+            },
             include: {
                 category: true,
 

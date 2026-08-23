@@ -1,82 +1,9 @@
-import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl, MaxLength, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ImageType, ProductStatus } from '../../../../generated/prisma/enums';
-
-export class CreateProductImageDto {
-    @IsString()
-    @IsNotEmpty()
-    mediaId!: string;
-
-    @IsEnum(ImageType)
-    @IsOptional()
-    type?: ImageType;
-
-    @IsString()
-    @IsOptional()
-    @MaxLength(255)
-    altText?: string;
-
-    @IsBoolean()
-    @IsOptional()
-    isPrimary?: boolean;
-
-    @IsInt()
-    @Min(0)
-    @IsOptional()
-    sortOrder?: number;
-}
-
-export class CreateProductSizeDto {
-    @IsString()
-    @IsNotEmpty()
-    sizeId!: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(100)
-    sku!: string;
-
-    @IsString()
-    @IsOptional()
-    @MaxLength(100)
-    barcode?: string;
-
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    mrp!: number;
-
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    sellingPrice!: number;
-
-    @IsInt()
-    @Min(0)
-    @IsOptional()
-    availableStock?: number;
-
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    @IsOptional()
-    weight?: number;
-
-    @IsBoolean()
-    @IsOptional()
-    isActive?: boolean;
-}
-
-export class CreateProductAttributeDto {
-    @IsString()
-    @IsNotEmpty()
-    attributeId!: string;
-
-    @IsString()
-    @IsOptional()
-    optionId?: string;
-
-    @IsString()
-    @IsOptional()
-    value?: string;
-}
+import { ProductStatus } from '../../../../generated/prisma/enums';
+import { CreateProductImageDto } from './create-product-image.dto';
+import { CreateProductSizeDto } from './create-product-size.dto';
+import { CreateProductAttributeDto } from './create-product-attribute.dto';
 
 export class CreateProductDto {
     @IsString()
@@ -87,11 +14,6 @@ export class CreateProductDto {
     @IsNotEmpty()
     @MaxLength(200)
     name!: string;
-
-    @IsString()
-    @IsNotEmpty()
-    @MaxLength(220)
-    slug!: string;
 
     @IsString()
     @IsOptional()
