@@ -538,8 +538,9 @@ model AttributeOption {
 
   productValues ProductAttribute[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  productAttributeOptions ProductAttributeOption[]
 
   @@unique([attributeId, value])
   @@index([attributeId])
@@ -555,18 +556,26 @@ model ProductAttribute {
   attributeId String
   attribute   Attribute @relation(fields: [attributeId], references: [id])
 
-  optionId String?
-  option   AttributeOption? @relation(fields: [optionId], references: [id])
-
   value String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  options ProductAttributeOption[]
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  attributeOption   AttributeOption? @relation(fields: [attributeOptionId], references: [id])
+  attributeOptionId String?
 
   @@unique([productId, attributeId])
-  @@index([productId])
-  @@index([attributeId])
-  @@index([optionId])
+}
+
+model ProductAttributeOption {
+  productAttributeId String
+  optionId           String
+
+  productAttribute ProductAttribute @relation(fields: [productAttributeId], references: [id], onDelete: Cascade)
+  option           AttributeOption  @relation(fields: [optionId], references: [id])
+
+  @@id([productAttributeId, optionId])
 }
 
 // CART
