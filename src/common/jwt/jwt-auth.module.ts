@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import type { StringValue } from 'ms';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RolesGuard } from './roles.guard';
 
 @Module({
     imports: [
@@ -22,9 +23,10 @@ import { JwtAuthGuard } from './jwt-auth.guard';
             }),
         }),
     ],
-    providers: [JwtAuthGuard],
+    providers: [JwtAuthGuard, RolesGuard],
     exports: [
         JwtAuthGuard,
+        RolesGuard,
         JwtModule,
     ],
 })

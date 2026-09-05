@@ -1,4 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+
+import { UserRole } from '../../../generated/prisma/enums';
+import { Roles } from '../../common/jwt/roles.decorator';
+import { JwtAuthGuard } from '../../common/jwt/jwt-auth.guard';
+import { RolesGuard } from '../../common/jwt/roles.guard';
 
 import { ProductsService } from './products.service';
 
@@ -17,11 +22,6 @@ import { UpdateProductAttributeDto } from './dto/update-product-attribute.dto';
 export class ProductsController {
     constructor(private readonly productsService: ProductsService) { }
 
-    @Post()
-    create(@Body() createProductDto: CreateProductDto) {
-        return this.productsService.create(createProductDto);
-    }
-
     @Get()
     findAll() {
         return this.productsService.findAll();
@@ -32,7 +32,16 @@ export class ProductsController {
         return this.productsService.findOne(id);
     }
 
+    @Post()
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    create(@Body() createProductDto: CreateProductDto) {
+        return this.productsService.create(createProductDto);
+    }
+
     @Patch(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     update(
         @Param('id') id: string,
         @Body() updateProductDto: UpdateProductDto,
@@ -44,11 +53,15 @@ export class ProductsController {
     }
 
     @Delete(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     remove(@Param('id') id: string) {
         return this.productsService.remove(id);
     }
 
     @Post(':productId/images')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     createImage(
         @Param('productId') productId: string,
         @Body() createImageDto: CreateProductImageDto,
@@ -60,6 +73,8 @@ export class ProductsController {
     }
 
     @Patch(':productId/images/:imageId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     updateImage(
         @Param('productId') productId: string,
         @Param('imageId') imageId: string,
@@ -73,6 +88,8 @@ export class ProductsController {
     }
 
     @Delete(':productId/images/:imageId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     removeImage(
         @Param('productId') productId: string,
         @Param('imageId') imageId: string,
@@ -84,6 +101,8 @@ export class ProductsController {
     }
 
     @Post(':productId/sizes')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     createSize(
         @Param('productId') productId: string,
         @Body() createSizeDto: CreateProductSizeDto,
@@ -95,6 +114,8 @@ export class ProductsController {
     }
 
     @Patch(':productId/sizes/:productSizeId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     updateSize(
         @Param('productId') productId: string,
         @Param('productSizeId') productSizeId: string,
@@ -108,6 +129,8 @@ export class ProductsController {
     }
 
     @Delete(':productId/sizes/:productSizeId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     removeSize(
         @Param('productId') productId: string,
         @Param('productSizeId') productSizeId: string,
@@ -119,6 +142,8 @@ export class ProductsController {
     }
 
     @Post(':productId/attributes')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     createAttribute(
         @Param('productId') productId: string,
         @Body()
@@ -131,6 +156,8 @@ export class ProductsController {
     }
 
     @Patch(':productId/attributes/:attributeId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     updateAttribute(
         @Param('productId') productId: string,
         @Param('attributeId') attributeId: string,
@@ -145,6 +172,8 @@ export class ProductsController {
     }
 
     @Delete(':productId/attributes/:attributeId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     removeAttribute(
         @Param('productId') productId: string,
         @Param('attributeId') attributeId: string,
