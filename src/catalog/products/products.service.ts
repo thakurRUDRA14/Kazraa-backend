@@ -1,12 +1,7 @@
-// product/product.service.ts
-
-import {
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 
 import { PostgresService } from '../../database/postgres/postgres.service';
+import { generateSlug } from '../../common/utils/slug.util';
 
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -19,35 +14,18 @@ import { UpdateProductSizeDto } from './dto/update-product-size.dto';
 
 import { CreateProductAttributeDto } from './dto/create-product-attribute.dto';
 import { UpdateProductAttributeDto } from './dto/update-product-attribute.dto';
-import { generateSlug } from '../../common/utils/slug.util';
 
 @Injectable()
 export class ProductsService {
-    constructor(
-        private readonly prisma: PostgresService,
-    ) { }
+    constructor(private readonly prisma: PostgresService) { }
 
     // POST /catalog/products
     async create(createProductDto: CreateProductDto) {
-        const {
-            categoryId,
-            name,
-            shortDescription,
-            description,
-            seoTitle,
-            seoDescription,
-            seoKeywords,
-            status,
-            images,
-            sizes,
-            attributes,
-        } = createProductDto;
+        const { categoryId, name, shortDescription, description, seoTitle, seoDescription, seoKeywords, status, images, sizes, attributes } = createProductDto;
 
-        // --------------------------------
         // Check slug
-        // --------------------------------
-
         const slug = generateSlug(name);
+
         const existingProduct =
             await this.prisma.product.findUnique({
                 where: {
@@ -56,15 +34,10 @@ export class ProductsService {
             });
 
         if (existingProduct) {
-            throw new ConflictException(
-                'A product with this slug already exists',
-            );
+            throw new ConflictException('A product with this slug already exists');
         }
 
-        // --------------------------------
         // Check category
-        // --------------------------------
-
         const category =
             await this.prisma.category.findFirst({
                 where: {
@@ -75,26 +48,15 @@ export class ProductsService {
             });
 
         if (!category) {
-            throw new NotFoundException(
-                'Category not found',
-            );
+            throw new NotFoundException('Category not found');
         }
 
-        // --------------------------------
         // Validate sizes
-        // --------------------------------
-
         if (sizes?.length) {
-            const sizeIds = sizes.map(
-                (item) => item.sizeId,
-            );
+            const sizeIds = sizes.map((item) => item.sizeId);
 
-            const uniqueSizeIds = new Set(sizeIds);
-
-            if (uniqueSizeIds.size !== sizeIds.length) {
-                throw new ConflictException(
-                    'A product cannot have the same size more than once',
-                );
+            if (new Set(sizeIds).size !== sizeIds.length) {
+                throw new ConflictException('A product cannot have the same size more than once',);
             }
 
             const existingSizes =
@@ -111,20 +73,14 @@ export class ProductsService {
                 });
 
             if (existingSizes.length !== sizeIds.length) {
-                throw new NotFoundException(
-                    'One or more sizes were not found',
-                );
+                throw new NotFoundException('One or more sizes were not found');
             }
 
             // Check duplicate SKUs
-            const skus = sizes.map(
-                (item) => item.sku,
-            );
+            const skus = sizes.map((item) => item.sku);
 
             if (new Set(skus).size !== skus.length) {
-                throw new ConflictException(
-                    'Duplicate SKU found',
-                );
+                throw new ConflictException('Duplicate SKU found');
             }
 
             const existingSku =
@@ -137,28 +93,17 @@ export class ProductsService {
                 });
 
             if (existingSku) {
-                throw new ConflictException(
-                    `SKU ${existingSku.sku} already exists`,
-                );
+                throw new ConflictException(`SKU ${existingSku.sku} already exists`);
             }
         }
 
-        // --------------------------------
         // Validate attributes
-        // --------------------------------
-
         if (attributes?.length) {
-            const attributeIds = attributes.map(
-                (item) => item.attributeId,
-            );
+            const attributeIds = attributes.map((item) => item.attributeId);
 
-            if (
-                new Set(attributeIds).size !==
-                attributeIds.length
-            ) {
-                throw new ConflictException(
-                    'A product cannot have the same attribute more than once',
-                );
+            // Same attribute cannot be assigned twice
+            if (new Set(attributeIds).size !== attributeIds.length) {
+                throw new ConflictException('A product cannot have the same attribute more than once');
             }
 
             for (const attribute of attributes) {
@@ -172,142 +117,178 @@ export class ProductsService {
                     });
 
                 if (!dbAttribute) {
-                    throw new NotFoundException(
-                        `Attribute ${attribute.attributeId} not found`,
-                    );
+                    throw new NotFoundException(`Attribute ${attribute.attributeId} not found`);
                 }
 
-                // If option is supplied,
-                // validate that option belongs to this attribute.
-                if (attribute.optionId) {
-                    const option =
-                        await this.prisma.attributeOption.findFirst({
+                const optionIds = attribute.optionIds ?? [];
+
+                // Validate duplicate option IDs
+                if (new Set(optionIds).size !== optionIds.length) {
+                    throw new ConflictException(`Duplicate options found for ${dbAttribute.name}`);
+                }
+
+                // Validate options
+                if (optionIds.length) {
+                    const existingOptions =
+                        await this.prisma.attributeOption.findMany({
                             where: {
-                                id: attribute.optionId,
+                                id: {
+                                    in: optionIds,
+                                },
                                 attributeId:
                                     attribute.attributeId,
                                 isActive: true,
                             },
+                            select: {
+                                id: true,
+                            },
                         });
 
-                    if (!option) {
-                        throw new NotFoundException(
-                            'Attribute option not found or does not belong to the attribute',
-                        );
+                    if (existingOptions.length !== optionIds.length) {
+                        throw new NotFoundException(`One or more options for ${dbAttribute.name} were not found or do not belong to this attribute`);
                     }
                 }
 
-                // SELECT / MULTI_SELECT should use options.
-                if (
-                    ['SELECT', 'MULTI_SELECT'].includes(
-                        dbAttribute.type,
-                    ) &&
-                    !attribute.optionId
-                ) {
-                    throw new ConflictException(
-                        `${dbAttribute.name} requires an attribute option`,
-                    );
+                // Validate based on attribute type
+                switch (dbAttribute.type) {
+                    case 'SELECT':
+                    case 'COLOR':
+                    case 'BOOLEAN':
+                        // Exactly one option required
+                        if (optionIds.length !== 1) {
+                            throw new BadRequestException(`${dbAttribute.name} requires exactly one option`);
+                        }
+
+                        if (attribute.value !== undefined) {
+                            throw new BadRequestException(`${dbAttribute.name} does not accept a custom value`);
+                        }
+
+                        break;
+
+                    case 'MULTI_SELECT':
+                        // At least one option required
+                        if (optionIds.length === 0) {
+                            throw new BadRequestException(`${dbAttribute.name} requires at least one option`);
+                        }
+
+                        if (attribute.value !== undefined) {
+                            throw new BadRequestException(`${dbAttribute.name} does not accept a custom value`);
+                        }
+
+                        break;
+
+                    case 'TEXT':
+                    case 'TEXTAREA':
+                    case 'NUMBER':
+                    case 'DATE':
+                    case 'URL':
+                        if (optionIds.length) {
+                            throw new BadRequestException(`${dbAttribute.name} does not use attribute options`);
+                        }
+
+                        // Free-form value required
+                        if (attribute.value === undefined) {
+                            throw new BadRequestException(`${dbAttribute.name} requires a value`);
+                        }
+
+                        break;
                 }
             }
         }
 
-        // --------------------------------
         // Create everything in transaction
-        // --------------------------------
-
         return this.prisma.$transaction(
             async (tx) => {
-                const product = await tx.product.create({
-                    data: {
-                        categoryId,
-                        name,
-                        slug,
-                        shortDescription,
-                        description,
-                        seoTitle,
-                        seoDescription,
-                        seoKeywords,
-                        status: status ?? 'DRAFT',
+                const product =
+                    await tx.product.create({
+                        data: {
+                            categoryId,
+                            name,
+                            slug,
+                            shortDescription,
+                            description,
+                            seoTitle,
+                            seoDescription,
+                            seoKeywords,
+                            status: status ?? 'DRAFT',
 
-                        images: images?.length
-                            ? {
-                                create: images.map((image) => ({
-                                    mediaId: image.mediaId,
-                                    type:
-                                        image.type ?? 'GALLERY',
-                                    altText: image.altText,
-                                    isPrimary:
-                                        image.isPrimary ?? false,
-                                    sortOrder:
-                                        image.sortOrder ?? 0,
-                                })),
-                            }
-                            : undefined,
+                            // Images
+                            images: images?.length
+                                ? {
+                                    create:
+                                        images.map(
+                                            (image) => ({
+                                                mediaId: image.mediaId,
+                                                type: image.type ?? 'GALLERY',
+                                                altText: image.altText,
+                                                isPrimary: image.isPrimary ?? false,
+                                                sortOrder: image.sortOrder ?? 0,
+                                            }),
+                                        ),
+                                }
+                                : undefined,
 
-                        sizes: sizes?.length
-                            ? {
-                                create: sizes.map((size) => ({
-                                    sizeId: size.sizeId,
-                                    sku: size.sku,
-                                    barcode: size.barcode,
-                                    mrp: size.mrp,
-                                    sellingPrice:
-                                        size.sellingPrice,
-                                    availableStock:
-                                        size.availableStock ?? 0,
-                                    weight: size.weight,
-                                    isActive:
-                                        size.isActive ?? true,
-                                })),
-                            }
-                            : undefined,
+                            // Sizes
+                            sizes: sizes?.length
+                                ? {
+                                    create:
+                                        sizes.map(
+                                            (size) => ({
+                                                sizeId: size.sizeId,
+                                                sku: size.sku,
+                                                barcode: size.barcode,
+                                                mrp: size.mrp,
+                                                sellingPrice: size.sellingPrice,
+                                                availableStock: size.availableStock ?? 0,
+                                                weight: size.weight,
+                                                isActive: size.isActive ?? true,
+                                            }),
+                                        ),
+                                }
+                                : undefined,
 
-                        attributes: attributes?.length
-                            ? {
-                                create: attributes.map(
-                                    (attribute) => ({
-                                        attributeId:
-                                            attribute.attributeId,
-                                        optionId:
-                                            attribute.optionId,
-                                        value: attribute.value,
-                                    }),
-                                ),
-                            }
-                            : undefined,
-                    },
-
-                    include: {
-                        category: true,
-
-                        images: {
-                            include: {
-                                media: true,
-                            },
-                            orderBy: {
-                                sortOrder: 'asc',
-                            },
+                            // Attributes
+                            attributes:
+                                attributes?.length
+                                    ? {
+                                        create:
+                                            attributes.map(
+                                                (attribute) => ({
+                                                    attributeId: attribute.attributeId,
+                                                    value: attribute.value,
+                                                    options: attribute.optionIds?.length
+                                                        ? { create: attribute.optionIds.map((optionId) => ({ optionId })) }
+                                                        : undefined,
+                                                }),
+                                            ),
+                                    }
+                                    : undefined,
                         },
 
-                        sizes: {
-                            include: {
-                                size: true,
+                        include: {
+                            category: true,
+                            images: {
+                                include: { media: true },
+                                orderBy: { sortOrder: 'asc' },
                             },
-                            orderBy: {
-                                size: {
-                                    sortOrder: 'asc',
+
+                            sizes: {
+                                include: { size: true },
+                                orderBy: {
+                                    size: { sortOrder: 'asc' },
+                                },
+                            },
+
+                            attributes: {
+                                include: {
+                                    attribute: true,
+                                    options: {
+                                        include: { option: true },
+                                    },
                                 },
                             },
                         },
-
-                        attributes: {
-                            include: {
-                                attribute: true,
-                                option: true,
-                            },
-                        },
-                    },
-                });
+                    });
 
                 return product;
             },
@@ -354,7 +335,9 @@ export class ProductsService {
                 attributes: {
                     include: {
                         attribute: true,
-                        option: true,
+                        options: {
+                            include: { option: true },
+                        },
                     },
                 },
             },
@@ -399,7 +382,9 @@ export class ProductsService {
                     attributes: {
                         include: {
                             attribute: true,
-                            option: true,
+                            options: {
+                                include: { option: true },
+                            },
                         },
                     },
                 },
@@ -419,95 +404,80 @@ export class ProductsService {
         id: string,
         updateProductDto: UpdateProductDto,
     ) {
-        const existingProduct = await this.prisma.product.findFirst({
-            where: {
-                id,
-                deletedAt: null,
-            },
-        });
+        // Find product
+        const existingProduct =
+            await this.prisma.product.findFirst({
+                where: {
+                    id,
+                    deletedAt: null,
+                },
+            });
 
         if (!existingProduct) {
             throw new NotFoundException('Product not found');
         }
 
+        // Generate slug when name changes
         let slug = existingProduct.slug;
 
-        // --------------------------------
-        // Generate slug when name changes
-        // --------------------------------
-
-        if (
-            updateProductDto.name &&
-            updateProductDto.name !== existingProduct.name
-        ) {
+        if (updateProductDto.name && updateProductDto.name !== existingProduct.name) {
             const newSlug = generateSlug(updateProductDto.name);
-
-            const duplicate = await this.prisma.product.findUnique({
-                where: {
-                    slug: newSlug,
-                },
-            });
+            const duplicate = await this.prisma.product.findUnique({ where: { slug: newSlug } });
 
             if (duplicate && duplicate.id !== id) {
-                throw new ConflictException(
-                    'A product with this name already exists',
-                );
+                throw new ConflictException('A product with this name already exists');
             }
 
             slug = newSlug;
         }
 
-        // --------------------------------
         // Check category
-        // --------------------------------
-
-        if (
-            updateProductDto.categoryId &&
-            updateProductDto.categoryId !== existingProduct.categoryId
-        ) {
-            const category = await this.prisma.category.findFirst({
-                where: {
-                    id: updateProductDto.categoryId,
-                    deletedAt: null,
-                    isActive: true,
-                },
-            });
+        if (updateProductDto.categoryId && updateProductDto.categoryId !== existingProduct.categoryId) {
+            const category =
+                await this.prisma.category.findFirst({
+                    where: {
+                        id: updateProductDto.categoryId,
+                        deletedAt: null,
+                        isActive: true,
+                    },
+                });
 
             if (!category) {
                 throw new NotFoundException('Category not found');
             }
         }
 
+        // Update product
         return this.prisma.product.update({
-            where: {
-                id,
-            },
+            where: { id, },
+
             data: {
                 ...updateProductDto,
                 slug,
             },
+
             include: {
                 category: true,
 
                 images: {
-                    include: {
-                        media: true,
-                    },
+                    include: { media: true },
+                    orderBy: { sortOrder: 'asc' },
                 },
 
                 sizes: {
-                    where: {
-                        deletedAt: null,
-                    },
-                    include: {
-                        size: true,
+                    where: { deletedAt: null },
+                    include: { size: true },
+                    orderBy: {
+                        size: { sortOrder: 'asc' },
                     },
                 },
 
                 attributes: {
                     include: {
                         attribute: true,
-                        option: true,
+                        options: {
+                            include: { option: true },
+                        },
                     },
                 },
             },
@@ -745,6 +715,14 @@ export class ProductsService {
             }
         }
 
+
+        if (createSizeDto.sellingPrice > createSizeDto.mrp) {
+            throw new BadRequestException(
+                'Selling price must be less than or equal to MRP',
+            );
+        }
+
+
         return this.prisma.productSize.create({
             data: {
                 productId,
@@ -753,11 +731,9 @@ export class ProductsService {
                 barcode: createSizeDto.barcode,
                 mrp: createSizeDto.mrp,
                 sellingPrice: createSizeDto.sellingPrice,
-                availableStock:
-                    createSizeDto.availableStock ?? 0,
+                availableStock: createSizeDto.availableStock ?? 0,
                 weight: createSizeDto.weight,
-                isActive:
-                    createSizeDto.isActive ?? true,
+                isActive: createSizeDto.isActive ?? true,
             },
             include: {
                 size: true,
@@ -906,67 +882,121 @@ export class ProductsService {
             throw new NotFoundException('Product not found');
         }
 
-        const attribute =
-            await this.prisma.attribute.findFirst({
-                where: {
-                    id: createAttributeDto.attributeId,
-                    deletedAt: null,
-                    isActive: true,
-                },
-            });
+        const attribute = await this.prisma.attribute.findFirst({
+            where: {
+                id: createAttributeDto.attributeId,
+                deletedAt: null,
+                isActive: true,
+            },
+        });
 
         if (!attribute) {
-            throw new NotFoundException(
-                'Attribute not found',
-            );
+            throw new NotFoundException('Attribute not found');
         }
 
+        // Check duplicate attribute
         const existing =
             await this.prisma.productAttribute.findUnique({
                 where: {
                     productId_attributeId: {
                         productId,
-                        attributeId:
-                            createAttributeDto.attributeId,
+                        attributeId: createAttributeDto.attributeId,
                     },
                 },
             });
 
         if (existing) {
-            throw new ConflictException(
-                'This attribute is already assigned to the product',
-            );
+            throw new ConflictException('This attribute is already assigned to the product');
         }
 
-        if (createAttributeDto.optionId) {
-            const option =
-                await this.prisma.attributeOption.findFirst({
+        const optionIds = createAttributeDto.optionIds ?? [];
+
+        // Check duplicate options
+        if (new Set(optionIds).size !== optionIds.length) {
+            throw new ConflictException(`Duplicate options found for ${attribute.name}`);
+        }
+
+        // Validate options
+        if (optionIds.length) {
+            const existingOptions =
+                await this.prisma.attributeOption.findMany({
                     where: {
-                        id: createAttributeDto.optionId,
-                        attributeId:
-                            createAttributeDto.attributeId,
+                        id: {
+                            in: optionIds,
+                        },
+                        attributeId: createAttributeDto.attributeId,
                         isActive: true,
+                    },
+                    select: {
+                        id: true,
                     },
                 });
 
-            if (!option) {
-                throw new NotFoundException(
-                    'Attribute option not found or does not belong to this attribute',
-                );
+            if (existingOptions.length !== optionIds.length) {
+                throw new NotFoundException(`One or more options for ${attribute.name} were not found or do not belong to this attribute`);
             }
         }
 
+        // Validate attribute value
+        switch (attribute.type) {
+            case 'SELECT':
+            case 'COLOR':
+                if (optionIds.length !== 1) {
+                    throw new BadRequestException(`${attribute.name} requires exactly one option`);
+                }
+
+                if (createAttributeDto.value !== undefined) {
+                    throw new BadRequestException(`${attribute.name} does not accept a custom value`);
+                }
+
+                break;
+
+            case 'MULTI_SELECT':
+                if (optionIds.length === 0) {
+                    throw new BadRequestException(`${attribute.name} requires at least one option`);
+                }
+
+                if (createAttributeDto.value !== undefined) {
+                    throw new BadRequestException(`${attribute.name} does not accept a custom value`);
+                }
+
+                break;
+
+            case 'TEXT':
+            case 'TEXTAREA':
+            case 'NUMBER':
+            case 'BOOLEAN':
+            case 'DATE':
+            case 'URL':
+                if (createAttributeDto.value === undefined) {
+                    throw new BadRequestException(`${attribute.name} requires a value`);
+                }
+
+                if (optionIds.length) {
+                    throw new BadRequestException(`${attribute.name} does not use attribute options`);
+                }
+
+                break;
+        }
+
+        // Create product attribute
         return this.prisma.productAttribute.create({
             data: {
                 productId,
-                attributeId:
-                    createAttributeDto.attributeId,
-                optionId: createAttributeDto.optionId,
+                attributeId: createAttributeDto.attributeId,
                 value: createAttributeDto.value,
+                options: optionIds.length
+                    ? {
+                        create: optionIds.map((optionId) => ({ optionId })),
+                    }
+                    : undefined,
             },
+
             include: {
                 attribute: true,
-                option: true,
+                options: {
+                    include: { option: true },
+                },
             },
         });
     }
@@ -976,6 +1006,7 @@ export class ProductsService {
         attributeId: string,
         updateAttributeDto: UpdateProductAttributeDto,
     ) {
+        // Find existing product attribute
         const productAttribute =
             await this.prisma.productAttribute.findUnique({
                 where: {
@@ -987,81 +1018,163 @@ export class ProductsService {
             });
 
         if (!productAttribute) {
-            throw new NotFoundException(
-                'Product attribute not found',
-            );
+            throw new NotFoundException('Product attribute not found');
         }
 
-        if (updateAttributeDto.attributeId) {
-            const attribute =
-                await this.prisma.attribute.findFirst({
+        // Determine target attribute
+        const targetAttributeId = updateAttributeDto.attributeId ?? attributeId;
+
+        const targetAttribute =
+            await this.prisma.attribute.findFirst({
+                where: {
+                    id: targetAttributeId,
+                    deletedAt: null,
+                    isActive: true,
+                },
+            });
+
+        if (!targetAttribute) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        // Check duplicate attribute
+        if (targetAttributeId !== attributeId) {
+            const duplicate =
+                await this.prisma.productAttribute.findUnique({
                     where: {
-                        id: updateAttributeDto.attributeId,
-                        deletedAt: null,
-                        isActive: true,
+                        productId_attributeId: {
+                            productId,
+                            attributeId: targetAttributeId,
+                        },
                     },
                 });
 
-            if (!attribute) {
-                throw new NotFoundException(
-                    'Attribute not found',
-                );
-            }
-
-            if (
-                updateAttributeDto.attributeId !==
-                attributeId
-            ) {
-                const duplicate =
-                    await this.prisma.productAttribute.findUnique({
-                        where: {
-                            productId_attributeId: {
-                                productId,
-                                attributeId:
-                                    updateAttributeDto.attributeId,
-                            },
-                        },
-                    });
-
-                if (duplicate) {
-                    throw new ConflictException(
-                        'This attribute is already assigned to the product',
-                    );
-                }
+            if (duplicate) {
+                throw new ConflictException('This attribute is already assigned to the product');
             }
         }
 
-        const targetAttributeId =
-            updateAttributeDto.attributeId ??
-            attributeId;
+        // Prepare option IDs
+        const optionIds = updateAttributeDto.optionIds ?? [];
 
-        if (updateAttributeDto.optionId) {
-            const option =
-                await this.prisma.attributeOption.findFirst({
+        // Check duplicate options
+        if (new Set(optionIds).size !== optionIds.length) {
+            throw new ConflictException(`Duplicate options found for ${targetAttribute.name}`);
+        }
+
+        // Validate options
+        if (optionIds.length) {
+            const existingOptions =
+                await this.prisma.attributeOption.findMany({
                     where: {
-                        id: updateAttributeDto.optionId,
+                        id: {
+                            in: optionIds,
+                        },
                         attributeId: targetAttributeId,
                         isActive: true,
                     },
+                    select: {
+                        id: true,
+                    },
                 });
 
-            if (!option) {
-                throw new NotFoundException(
-                    'Attribute option not found or does not belong to this attribute',
-                );
+            if (existingOptions.length !== optionIds.length) {
+                throw new NotFoundException(`One or more options for ${targetAttribute.name} were not found or do not belong to this attribute`);
             }
         }
 
-        return this.prisma.productAttribute.update({
-            where: {
-                id: productAttribute.id,
+        // Validate based on attribute type
+        switch (targetAttribute.type) {
+            case 'SELECT':
+            case 'COLOR':
+                if (optionIds.length !== 1) {
+                    throw new BadRequestException(`${targetAttribute.name} requires exactly one option`);
+                }
+
+                if (updateAttributeDto.value !== undefined) {
+                    throw new BadRequestException(`${targetAttribute.name} does not accept a custom value`);
+                }
+
+                break;
+
+            case 'MULTI_SELECT':
+                if (optionIds.length === 0) {
+                    throw new BadRequestException(`${targetAttribute.name} requires at least one option`);
+                }
+
+                if (updateAttributeDto.value !== undefined) {
+                    throw new BadRequestException(`${targetAttribute.name} does not accept a custom value`);
+                }
+
+                break;
+
+            case 'TEXT':
+            case 'TEXTAREA':
+            case 'NUMBER':
+            case 'BOOLEAN':
+            case 'DATE':
+            case 'URL':
+                if (updateAttributeDto.value === undefined) {
+                    throw new BadRequestException(`${targetAttribute.name} requires a value`);
+                }
+
+                if (optionIds.length) {
+                    throw new BadRequestException(`${targetAttribute.name} does not use attribute options`);
+                }
+
+                break;
+        }
+
+        // Update in transaction
+        return this.prisma.$transaction(
+            async (tx) => {
+                // If attribute itself changes, update it first.
+                const updatedAttribute =
+                    await tx.productAttribute.update({
+                        where: {
+                            id: productAttribute.id,
+                        },
+                        data: {
+                            attributeId: targetAttributeId,
+                            value: updateAttributeDto.value,
+                        },
+                    });
+
+                // Replace options
+                await tx.productAttributeOption.deleteMany({
+                    where: {
+                        productAttributeId: productAttribute.id,
+                    },
+                });
+
+                if (optionIds.length) {
+                    await tx.productAttributeOption.createMany({
+                        data: optionIds.map(
+                            (optionId) => ({
+                                productAttributeId: productAttribute.id,
+                                optionId,
+                            }),
+                        ),
+                    });
+                }
+
+                // Return updated attribute
+                return tx.productAttribute.findUnique({
+                    where: {
+                        id: updatedAttribute.id,
+                    },
+                    include: {
+                        attribute: true,
+
+                        options: {
+                            include: {
+                                option: true,
+                            },
+                        },
+                    },
+                });
             },
-            data: updateAttributeDto,
-            include: {
-                attribute: true,
-                option: true,
-            },
-        });
+        );
     }
 
     async removeAttribute(
@@ -1079,9 +1192,7 @@ export class ProductsService {
             });
 
         if (!productAttribute) {
-            throw new NotFoundException(
-                'Product attribute not found',
-            );
+            throw new NotFoundException('Product attribute not found');
         }
 
         return this.prisma.productAttribute.delete({

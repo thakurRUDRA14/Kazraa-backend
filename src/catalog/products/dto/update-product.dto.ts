@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ProductStatus } from '../../../../generated/prisma/enums';
 
 export class UpdateProductDto {
@@ -8,6 +8,7 @@ export class UpdateProductDto {
 
     @IsString()
     @IsOptional()
+    @IsNotEmpty()
     @MaxLength(200)
     name?: string;
 

@@ -1,13 +1,14 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateProductAttributeDto {
     @IsString()
     @IsNotEmpty()
     attributeId!: string;
 
-    @IsString()
+    @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    optionId?: string;
+    optionIds?: string[];
 
     @IsString()
     @IsOptional()
