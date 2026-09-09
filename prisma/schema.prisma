@@ -93,6 +93,21 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum ReturnType {
+  CUSTOMER_RETURN
+  RTO
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PICKUP_SCHEDULED
+  PICKED_UP
+  RECEIVED
+  COMPLETED
+}
+
 // REVIEW
 enum ReviewStatus {
   PENDING
@@ -642,6 +657,8 @@ model Order {
 
   payment Payment?
 
+  returnRequest ReturnRequest?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -727,6 +744,26 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([status])
+}
+
+model ReturnRequest {
+  id String @id @default(cuid())
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  type ReturnType
+
+  status ReturnStatus @default(REQUESTED)
+
+  reason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([type])
   @@index([status])
 }
 
