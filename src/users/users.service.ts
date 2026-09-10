@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UsersService {
@@ -118,6 +120,46 @@ export class UsersService {
         updatedAt: true,
       },
     });
+  }
+
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password,
+    );
+
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const isSamePassword = await bcrypt.compare(
+      dto.newPassword,
+      user.password,
+    );
+
+    if (isSamePassword) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 
   async deleteMe(userId: string) {
