@@ -152,7 +152,7 @@ export class UsersService {
       throw new BadRequestException('New password must be different from current password');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
+    const hashedPassword = await bcrypt.hash(dto.newPassword, process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 12);
 
     await this.prisma.user.update({
       where: { id: userId },

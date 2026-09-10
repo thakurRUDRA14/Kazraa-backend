@@ -7,5 +7,5 @@ export default registerAs('auth', () => ({
   refreshTokenSecret: process.env.JWT_REFRESH_SECRET,
   refreshTokenExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
 
-  bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS ?? 12),
+  bcryptSaltRounds: process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 12,
 }));

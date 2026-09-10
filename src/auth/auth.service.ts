@@ -32,7 +32,7 @@ export class AuthService {
     }
 
     // 3. Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 12);
 
     try {
       // 4. Create user
