@@ -76,6 +76,11 @@ enum OrderStatus {
 }
 
 // PAYMENT
+enum PaymentProvider {
+  CASHFREE
+  RAZORPAY
+}
+
 enum PaymentMethod {
   COD
   UPI
@@ -723,17 +728,16 @@ model Payment {
   orderId String @unique
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  method PaymentMethod
-
-  status PaymentStatus @default(PENDING)
+  provider PaymentProvider?
+  method   PaymentMethod
+  status   PaymentStatus    @default(PENDING)
 
   amount Decimal @db.Decimal(10, 2)
 
-  transactionId String?
+  providerPaymentId String?
+  providerOrderId   String?
 
-  gateway String?
-
-  gatewayResponse Json?
+  providerResponse Json?
 
   paidAt DateTime?
 
@@ -741,6 +745,9 @@ model Payment {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([provider])
+  @@index([providerPaymentId])
+  @@index([providerOrderId])
 }
 
 model ReturnRequest {
