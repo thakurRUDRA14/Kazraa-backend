@@ -83,6 +83,7 @@ enum PaymentProvider {
 
 enum PaymentMethod {
   COD
+  ONLINE
   UPI
   CREDIT_CARD
   DEBIT_CARD

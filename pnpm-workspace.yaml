@@ -1,5 +1,7 @@
 allowBuilds:
   '@prisma/engines': true
   bcrypt: true
+  esbuild: false
+  pnpm: false
   prisma: true
   unrs-resolver: false

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { Prisma } from '../../generated/prisma/client';
-import { CartStatus, OrderStatus, PaymentStatus, UserRole } from '../../generated/prisma/enums';
+import { CartStatus, OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '../../generated/prisma/enums';
 
 import { PostgresService } from '../database/postgres/postgres.service';
 
@@ -139,7 +139,8 @@ export class OrdersService {
                 data: {
                     orderNumber,
                     userId,
-                    status: OrderStatus.PENDING,
+                    status: dto.paymentMethod === PaymentMethod.COD
+                        ? OrderStatus.CONFIRMED : OrderStatus.PENDING,
 
                     subtotal,
                     shippingCharge,
@@ -163,7 +164,7 @@ export class OrdersService {
                         },
                     },
 
-                    items: { create: orderItemsData, },
+                    items: { create: orderItemsData },
 
                     payment: {
                         create: {
