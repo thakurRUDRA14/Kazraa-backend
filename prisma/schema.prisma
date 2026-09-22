@@ -13,6 +13,76 @@ datasource db {
   provider = "postgresql"
 }
 
+// Image
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum MediaStatus {
+  TEMPORARY
+  ACTIVE
+  FAILED
+  DELETED
+}
+
+enum MediaPurpose {
+  PRODUCT
+  CATEGORY
+  BANNER
+  CATALOGUE
+  COLLECTION
+  HOMEPAGE
+  CAMPAIGN
+  SOCIAL_POST
+  PROFILE
+  REVIEW
+  STORE
+  MARKETPLACE
+}
+
+enum MediaEntityType {
+  PRODUCT
+  CATEGORY
+  BANNER
+  CATALOGUE
+  COLLECTION
+  HOMEPAGE
+  CAMPAIGN
+  SOCIAL_POST
+  USER
+  REVIEW
+  STORE
+  MARKETPLACE
+}
+
+enum MediaRole {
+  PRIMARY
+  GALLERY
+  THUMBNAIL
+  COVER
+
+  DESKTOP_IMAGE
+  MOBILE_IMAGE
+
+  VIDEO
+  AVATAR
+  LOGO
+  FAVICON
+
+  PAGE
+  HERO
+  MOBILE_HERO
+  CARD
+  CONTENT
+}
+
+enum StorageProvider {
+  CLOUDINARY
+  S3
+  R2
+}
+
 // USER
 enum UserRole {
   CUSTOMER
@@ -31,15 +101,6 @@ enum ProductStatus {
   ACTIVE
   INACTIVE
   ARCHIVED
-}
-
-enum ImageType {
-  FRONT
-  BACK
-  SIDE
-  NECK
-  ZOOM
-  GALLERY
 }
 
 // ATTRIBUTE
@@ -136,65 +197,75 @@ enum AuditAction {
   ARCHIVE
 }
 
+// Media
 model Media {
   id String @id @default(cuid())
 
-  url String
+  type MediaType
 
-  mimeType String?
+  status MediaStatus @default(TEMPORARY)
 
-  size Int?
+  purpose MediaPurpose
 
-  width Int?
+  // Storage
+  url             String
+  storageProvider StorageProvider
+  publicId        String?
 
-  height Int?
+  originalName String?
+  mimeType     String?
+  size         BigInt?
+
+  width    Int?
+  height   Int?
+  duration Float?
 
   altText String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  uploadedById String?
+  uploadedBy   User?   @relation("UserUploadedMedia", fields: [uploadedById], references: [id], onDelete: SetNull)
 
-  productImages ProductImage[]
+  usages MediaUsage[]
 
-  bannerImages       Banner[] @relation("BannerImage")
-  bannerMobileImages Banner[] @relation("BannerMobileImage")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  storeLogo    StoreSetting[] @relation("StoreLogo")
-  storeFavicon StoreSetting[] @relation("StoreFavicon")
-  marketplaces Marketplace[]
-  reviewImages ReviewImage[]
+  @@index([status])
+  @@index([type])
+  @@index([purpose])
+  @@index([storageProvider])
+  @@index([uploadedById])
+  @@index([createdAt])
+  @@index([deletedAt])
 }
 
-model Marketplace {
+model MediaUsage {
   id String @id @default(cuid())
 
-  name String
+  mediaId String
+  media   Media  @relation(fields: [mediaId], references: [id], onDelete: Cascade)
 
-  slug String @unique
+  entityType MediaEntityType
+  entityId   String
 
-  logoId String?
+  role MediaRole
 
-  logo Media? @relation(fields: [logoId], references: [id])
-
-  isActive Boolean @default(true)
-
-  links ProductLink[]
+  sortOrder Int @default(0)
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, entityId, role, sortOrder])
+  @@index([mediaId])
+  @@index([entityType, entityId])
+  @@index([entityType, entityId, role])
 }
 
 model StoreSetting {
   id String @id @default(cuid())
 
   storeName String
-  logoId    String?
 
-  logo Media? @relation("StoreLogo", fields: [logoId], references: [id])
-
-  faviconId String?
-
-  favicon      Media?  @relation("StoreFavicon", fields: [faviconId], references: [id])
   supportEmail String?
   supportPhone String?
 
@@ -204,6 +275,21 @@ model StoreSetting {
 
   address   String?
   gstNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Marketplace {
+  id String @id @default(cuid())
+
+  name String
+
+  slug String @unique
+
+  isActive Boolean @default(true)
+
+  links ProductLink[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -237,8 +323,6 @@ model User {
 
   password String
 
-  avatar String?
-
   role   UserRole   @default(CUSTOMER)
   status UserStatus @default(ACTIVE)
 
@@ -262,6 +346,8 @@ model User {
 
   defaultAddressId String?  @unique
   defaultAddress   Address? @relation("DefaultAddress", fields: [defaultAddressId], references: [id], onDelete: SetNull)
+
+  uploadedMedia Media[] @relation("UserUploadedMedia")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -315,7 +401,6 @@ model Category {
   slug String @unique
 
   description String?
-  imageUrl    String?
 
   parentId String?
   parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
@@ -341,8 +426,6 @@ model Collection {
   slug String @unique
 
   description String?
-
-  imageUrl String?
 
   isActive Boolean @default(true)
 
@@ -376,20 +459,15 @@ model Product {
 
   status ProductStatus @default(DRAFT)
 
-  images ProductImage[]
-
-  sizes ProductSize[]
-
-  attributes ProductAttribute[]
-
-  reviews Review[]
-
-  marketplaceLinks ProductLink[]
-
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  deletedAt          DateTime?
+  sizes              ProductSize[]
+  attributes         ProductAttribute[]
+  reviews            Review[]
+  marketplaceLinks   ProductLink[]
   collectionProducts CollectionProduct[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([categoryId])
   @@index([slug])
@@ -412,29 +490,6 @@ model CollectionProduct {
 
   @@id([collectionId, productId])
   @@index([collectionId])
-  @@index([productId])
-}
-
-// PRODUCT IMAGE
-model ProductImage {
-  id String @id @default(cuid())
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  mediaId String
-  media   Media  @relation(fields: [mediaId], references: [id])
-
-  type ImageType @default(GALLERY)
-
-  altText String?
-
-  isPrimary Boolean @default(false)
-  sortOrder Int     @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   @@index([productId])
 }
 
@@ -790,8 +845,6 @@ model Review {
 
   review String?
 
-  images ReviewImage[]
-
   status ReviewStatus @default(PENDING)
 
   createdAt DateTime @default(now())
@@ -802,33 +855,12 @@ model Review {
   @@index([status])
 }
 
-model ReviewImage {
-  reviewId String
-
-  mediaId String
-
-  review Review @relation(fields: [reviewId], references: [id])
-
-  media Media @relation(fields: [mediaId], references: [id])
-
-  sortOrder Int @default(0)
-
-  @@id([reviewId, mediaId])
-}
-
 // BANNER
 model Banner {
   id String @id @default(cuid())
 
-  title String
-
+  title    String
   subtitle String?
-
-  imageId String
-  image   Media  @relation("BannerImage", fields: [imageId], references: [id])
-
-  mobileImageId String?
-  mobileImage   Media?  @relation("BannerMobileImage", fields: [mobileImageId], references: [id])
 
   redirectUrl String?
 
@@ -837,8 +869,7 @@ model Banner {
   status BannerStatus @default(ACTIVE)
 
   startsAt DateTime?
-
-  endsAt DateTime?
+  endsAt   DateTime?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
