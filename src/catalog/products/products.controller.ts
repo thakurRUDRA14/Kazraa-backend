@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 
 import { UserRole } from '../../../generated/prisma/enums';
 import { Roles } from '../../common/jwt/roles.decorator';
@@ -9,8 +9,7 @@ import { ProductsService } from './products.service';
 
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { CreateProductImageDto } from './dto/create-product-image.dto';
-import { UpdateProductImageDto } from './dto/update-product-image.dto';
+import { UpdateProductMediaDto } from './dto/update-product-media.dto';
 
 import { CreateProductSizeDto } from './dto/create-product-size.dto';
 import { UpdateProductSizeDto } from './dto/update-product-size.dto';
@@ -59,44 +58,16 @@ export class ProductsController {
         return this.productsService.remove(id);
     }
 
-    @Post(':productId/images')
+    @Put(':productId/media')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
-    createImage(
+    async updateMedia(
         @Param('productId') productId: string,
-        @Body() createImageDto: CreateProductImageDto,
+        @Body() dto: UpdateProductMediaDto,
     ) {
-        return this.productsService.createImage(
+        return this.productsService.updateMedia(
             productId,
-            createImageDto,
-        );
-    }
-
-    @Patch(':productId/images/:imageId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN)
-    updateImage(
-        @Param('productId') productId: string,
-        @Param('imageId') imageId: string,
-        @Body() updateImageDto: UpdateProductImageDto,
-    ) {
-        return this.productsService.updateImage(
-            productId,
-            imageId,
-            updateImageDto,
-        );
-    }
-
-    @Delete(':productId/images/:imageId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN)
-    removeImage(
-        @Param('productId') productId: string,
-        @Param('imageId') imageId: string,
-    ) {
-        return this.productsService.removeImage(
-            productId,
-            imageId,
+            dto.media,
         );
     }
 

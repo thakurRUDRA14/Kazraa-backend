@@ -1,13 +1,15 @@
 import { ConflictException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 
+import { Prisma } from '../../../generated/prisma/client';
 import { PostgresService } from '../../database/postgres/postgres.service';
 import { generateSlug } from '../../common/utils/slug.util';
+import { MediaEntityType, MediaStatus, MediaType, ProductStatus } from '../../../generated/prisma/enums';
 
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
-import { CreateProductImageDto } from './dto/create-product-image.dto';
-import { UpdateProductImageDto } from './dto/update-product-image.dto';
+import { MediaService } from '../../media/media.service';
+import { ProductMediaDto } from './dto/product-media.dto';
 
 import { CreateProductSizeDto } from './dto/create-product-size.dto';
 import { UpdateProductSizeDto } from './dto/update-product-size.dto';
@@ -15,22 +17,24 @@ import { UpdateProductSizeDto } from './dto/update-product-size.dto';
 import { CreateProductAttributeDto } from './dto/create-product-attribute.dto';
 import { UpdateProductAttributeDto } from './dto/update-product-attribute.dto';
 
+
 @Injectable()
 export class ProductsService {
-    constructor(private readonly prisma: PostgresService) { }
+    constructor(
+        private readonly prisma: PostgresService,
+        private readonly mediaService: MediaService,
+    ) { }
 
     // POST /catalog/products
     async create(createProductDto: CreateProductDto) {
-        const { categoryId, name, shortDescription, description, seoTitle, seoDescription, seoKeywords, status, images, sizes, attributes } = createProductDto;
+        const { categoryId, name, shortDescription, description, seoTitle, seoDescription, seoKeywords, status, media, sizes, attributes } = createProductDto;
 
         // Check slug
         const slug = generateSlug(name);
 
         const existingProduct =
             await this.prisma.product.findUnique({
-                where: {
-                    slug,
-                },
+                where: { slug },
             });
 
         if (existingProduct) {
@@ -196,9 +200,14 @@ export class ProductsService {
             }
         }
 
+        // media validation
+        await this.validateProductMedia(media);
+
         // Create everything in transaction
         return this.prisma.$transaction(
             async (tx) => {
+
+                // 1. Create product
                 const product =
                     await tx.product.create({
                         data: {
@@ -210,23 +219,7 @@ export class ProductsService {
                             seoTitle,
                             seoDescription,
                             seoKeywords,
-                            status: status ?? 'DRAFT',
-
-                            // Images
-                            images: images?.length
-                                ? {
-                                    create:
-                                        images.map(
-                                            (image) => ({
-                                                mediaId: image.mediaId,
-                                                type: image.type ?? 'GALLERY',
-                                                altText: image.altText,
-                                                isPrimary: image.isPrimary ?? false,
-                                                sortOrder: image.sortOrder ?? 0,
-                                            }),
-                                        ),
-                                }
-                                : undefined,
+                            status: status ?? ProductStatus.DRAFT,
 
                             // Sizes
                             sizes: sizes?.length
@@ -264,106 +257,81 @@ export class ProductsService {
                                     }
                                     : undefined,
                         },
+                    });
 
-                        include: {
-                            category: true,
-                            images: {
-                                include: { media: true },
-                                orderBy: { sortOrder: 'asc' },
+                // 2. Attach media
+                for (const item of media ?? []) {
+                    await this.mediaService.attach(
+                        {
+                            mediaId: item.mediaId,
+                            entityType: MediaEntityType.PRODUCT,
+                            entityId: product.id,
+                            role: item.role,
+                            sortOrder: item.sortOrder ?? 0,
+                        },
+                        tx,
+                    );
+                }
+
+                // 4. Return complete product
+                const createdProduct = await tx.product.findUnique({
+                    where: { id: product.id },
+                    include: {
+                        category: true,
+
+                        sizes: {
+                            include: { size: true },
+                            orderBy: {
+                                size: { sortOrder: 'asc' },
                             },
+                        },
 
-                            sizes: {
-                                include: { size: true },
-                                orderBy: {
-                                    size: { sortOrder: 'asc' },
-                                },
-                            },
-
-                            attributes: {
-                                include: {
-                                    attribute: true,
-                                    options: {
-                                        include: { option: true },
-                                    },
+                        attributes: {
+                            include: {
+                                attribute: true,
+                                options: {
+                                    include: { option: true },
                                 },
                             },
                         },
-                    });
+                    },
+                });
 
-                return product;
+                if (!createdProduct) {
+                    throw new NotFoundException('Created product not found');
+                }
+
+                const mediaUsages = await tx.mediaUsage.findMany({
+                    where: {
+                        entityType: 'PRODUCT',
+                        entityId: product.id,
+                    },
+                    include: { media: true },
+                    orderBy: { sortOrder: 'asc' },
+                });
+
+                return {
+                    ...createdProduct,
+                    media: mediaUsages,
+                };
             },
         );
     }
 
     // GET /catalog/products
     async findAll() {
-        return this.prisma.product.findMany({
-            where: {
-                deletedAt: null,
-            },
-
-            orderBy: {
-                createdAt: 'desc',
-            },
-
-            include: {
-                category: true,
-
-                images: {
-                    include: {
-                        media: true,
-                    },
-                    orderBy: {
-                        sortOrder: 'asc',
-                    },
-                },
-
-                sizes: {
-                    where: {
-                        deletedAt: null,
-                    },
-                    include: {
-                        size: true,
-                    },
-                    orderBy: {
-                        size: {
-                            sortOrder: 'asc',
-                        },
-                    },
-                },
-
-                attributes: {
-                    include: {
-                        attribute: true,
-                        options: {
-                            include: { option: true },
-                        },
-                    },
-                },
-            },
-        });
-    }
-
-    // GET /catalog/products/:id
-    async findOne(id: string) {
-        const product =
-            await this.prisma.product.findFirst({
+        const products =
+            await this.prisma.product.findMany({
                 where: {
-                    id,
                     deletedAt: null,
+                },
+
+                orderBy: {
+                    createdAt: 'desc',
                 },
 
                 include: {
                     category: true,
-
-                    images: {
-                        include: {
-                            media: true,
-                        },
-                        orderBy: {
-                            sortOrder: 'asc',
-                        },
-                    },
 
                     sizes: {
                         where: {
@@ -383,6 +351,74 @@ export class ProductsService {
                         include: {
                             attribute: true,
                             options: {
+                                include: {
+                                    option: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+        if (!products.length) {
+            return [];
+        }
+
+        const productIds = products.map((product) => product.id);
+
+        const mediaUsages =
+            await this.prisma.mediaUsage.findMany({
+                where: {
+                    entityType: MediaEntityType.PRODUCT,
+                    entityId: { in: productIds },
+                },
+                include: { media: true },
+                orderBy: { sortOrder: 'asc' },
+            });
+
+        const mediaByProduct = new Map<string, typeof mediaUsages>();
+
+        for (const usage of mediaUsages) {
+            const existing = mediaByProduct.get(usage.entityId) ?? [];
+
+            existing.push(usage);
+
+            mediaByProduct.set(
+                usage.entityId,
+                existing,
+            );
+        }
+
+        return products.map((product) => ({
+            ...product,
+            media: mediaByProduct.get(product.id) ?? [],
+        }));
+    }
+
+    // GET /catalog/products/:id
+    async findOne(id: string) {
+        const product =
+            await this.prisma.product.findFirst({
+                where: {
+                    id,
+                    deletedAt: null,
+                },
+
+                include: {
+                    category: true,
+
+                    sizes: {
+                        where: { deletedAt: null },
+                        include: { size: true },
+                        orderBy: {
+                            size: { sortOrder: 'asc' },
+                        },
+                    },
+
+                    attributes: {
+                        include: {
+                            attribute: true,
+                            options: {
                                 include: { option: true },
                             },
                         },
@@ -391,12 +427,15 @@ export class ProductsService {
             });
 
         if (!product) {
-            throw new NotFoundException(
-                'Product not found',
-            );
+            throw new NotFoundException('Product not found');
         }
 
-        return product;
+        const media = this.mediaService.getUsages(MediaEntityType.PRODUCT, product.id);
+
+        return {
+            ...product,
+            media,
+        };
     }
 
     // PATCH /catalog/products/:id
@@ -431,7 +470,7 @@ export class ProductsService {
             slug = newSlug;
         }
 
-        // Check category
+        // Validate category when changed
         if (updateProductDto.categoryId && updateProductDto.categoryId !== existingProduct.categoryId) {
             const category =
                 await this.prisma.category.findFirst({
@@ -447,41 +486,39 @@ export class ProductsService {
             }
         }
 
-        // Update product
-        return this.prisma.product.update({
-            where: { id, },
+        // 4. Update product
+        const updatedProduct =
+            await this.prisma.product.update({
+                where: { id },
 
-            data: {
-                ...updateProductDto,
-                slug,
-            },
-
-            include: {
-                category: true,
-
-                images: {
-                    include: { media: true },
-                    orderBy: { sortOrder: 'asc' },
+                data: {
+                    ...updateProductDto,
+                    slug,
                 },
 
-                sizes: {
-                    where: { deletedAt: null },
-                    include: { size: true },
-                    orderBy: {
-                        size: { sortOrder: 'asc' },
+                include: {
+                    category: true,
+
+                    sizes: {
+                        where: { deletedAt: null },
+                        include: { size: true },
+                        orderBy: {
+                            size: { sortOrder: 'asc' },
+                        },
                     },
-                },
 
-                attributes: {
-                    include: {
-                        attribute: true,
-                        options: {
-                            include: { option: true },
+                    attributes: {
+                        include: {
+                            attribute: true,
+                            options: {
+                                include: { option: true },
+                            },
                         },
                     },
                 },
-            },
-        });
+            });
+
+        return updatedProduct;
     }
 
     // DELETE /catalog/products/:id
@@ -500,149 +537,77 @@ export class ProductsService {
             );
         }
 
-        // Soft delete
+        // return this.prisma.$transaction(
+        //     async (tx) => {
+
+        //         await tx.mediaUsage.deleteMany({
+        //             where: {
+        //                 entityType: MediaEntityType.PRODUCT,
+        //                 entityId: id,
+        //             },
+        //         });
+
+        //         return tx.product.update({
+        //             where: { id },
+
+        //             data: {
+        //                 deletedAt: new Date(),
+        //                 status: ProductStatus.ARCHIVED,
+        //             },
+        //         });
+        //     },
+        // );
+
         return this.prisma.product.update({
-            where: {
-                id,
-            },
+            where: { id },
             data: {
                 deletedAt: new Date(),
-                status: 'ARCHIVED',
+                status: ProductStatus.ARCHIVED,
             },
         });
     }
 
-    async createImage(
+    // PUT /catalog/products/:id/media
+    async updateMedia(
         productId: string,
-        createImageDto: CreateProductImageDto,
+        media: ProductMediaDto[],
     ) {
-        const product = await this.prisma.product.findFirst({
-            where: {
-                id: productId,
-                deletedAt: null,
-            },
-        });
+        // 1. Verify product
+        const product =
+            await this.prisma.product.findFirst({
+                where: {
+                    id: productId,
+                    deletedAt: null,
+                },
+                select: { id: true },
+            });
 
         if (!product) {
             throw new NotFoundException('Product not found');
         }
 
-        const media = await this.prisma.media.findUnique({
-            where: {
-                id: createImageDto.mediaId,
-            },
-        });
+        // 2. Validate media before modifying DB
+        await this.validateProductMedia(media);
 
-        if (!media) {
-            throw new NotFoundException('Media not found');
-        }
-
-        // Only one primary image should exist.
-        if (createImageDto.isPrimary) {
-            await this.prisma.productImage.updateMany({
-                where: {
+        // 3. Synchronize and return
+        return this.prisma.$transaction(
+            async (tx) => {
+                await this.syncProductMedia(
                     productId,
-                    isPrimary: true,
-                },
-                data: {
-                    isPrimary: false,
-                },
-            });
-        }
+                    media,
+                    tx,
+                );
 
-        return this.prisma.productImage.create({
-            data: {
-                productId,
-                mediaId: createImageDto.mediaId,
-                type: createImageDto.type ?? 'GALLERY',
-                altText: createImageDto.altText,
-                isPrimary: createImageDto.isPrimary ?? false,
-                sortOrder: createImageDto.sortOrder ?? 0,
-            },
-            include: {
-                media: true,
-            },
-        });
-    }
-
-    async updateImage(
-        productId: string,
-        imageId: string,
-        updateImageDto: UpdateProductImageDto,
-    ) {
-        const image = await this.prisma.productImage.findFirst({
-            where: {
-                id: imageId,
-                productId,
-            },
-        });
-
-        if (!image) {
-            throw new NotFoundException(
-                'Product image not found',
-            );
-        }
-
-        if (updateImageDto.mediaId) {
-            const media = await this.prisma.media.findUnique({
-                where: {
-                    id: updateImageDto.mediaId,
-                },
-            });
-
-            if (!media) {
-                throw new NotFoundException('Media not found');
-            }
-        }
-
-        if (updateImageDto.isPrimary === true) {
-            await this.prisma.productImage.updateMany({
-                where: {
-                    productId,
-                    id: {
-                        not: imageId,
+                return tx.mediaUsage.findMany({
+                    where: {
+                        entityType: MediaEntityType.PRODUCT,
+                        entityId: productId,
                     },
-                    isPrimary: true,
-                },
-                data: {
-                    isPrimary: false,
-                },
-            });
-        }
-
-        return this.prisma.productImage.update({
-            where: {
-                id: imageId,
+                    include: { media: true },
+                    orderBy: { sortOrder: 'asc' },
+                });
             },
-            data: updateImageDto,
-            include: {
-                media: true,
-            },
-        });
-    }
-
-    async removeImage(
-        productId: string,
-        imageId: string,
-    ) {
-        const image = await this.prisma.productImage.findFirst({
-            where: {
-                id: imageId,
-                productId,
-            },
-        });
-
-        if (!image) {
-            throw new NotFoundException(
-                'Product image not found',
-            );
-        }
-
-        return this.prisma.productImage.delete({
-            where: {
-                id: imageId,
-            },
-        });
+        );
     }
 
     async createSize(
@@ -1200,5 +1165,95 @@ export class ProductsService {
                 id: productAttribute.id,
             },
         });
+    }
+
+    // helper
+    private async syncProductMedia(
+        productId: string,
+        requestedMedia: ProductMediaDto[],
+        tx: Prisma.TransactionClient,
+    ) {
+        // 1. Get existing media relationships
+        const existing =
+            await tx.mediaUsage.findMany({
+                where: {
+                    entityType: MediaEntityType.PRODUCT,
+                    entityId: productId,
+                },
+            });
+
+        const requestedIds = new Set(requestedMedia.map((item) => item.mediaId));
+
+        // 2. Remove media that is no longer attached
+        for (const usage of existing) {
+            if (!requestedIds.has(usage.mediaId)) {
+                await tx.mediaUsage.delete({
+                    where: { id: usage.id },
+                });
+            }
+        }
+
+        // 3. Add/update requested media
+        for (const item of requestedMedia) {
+            const existingUsage =
+                existing.find(
+                    (usage) => usage.mediaId === item.mediaId);
+
+            if (existingUsage) {
+                await tx.mediaUsage.update({
+                    where: { id: existingUsage.id },
+                    data: {
+                        role: item.role,
+                        sortOrder: item.sortOrder ?? 0,
+                    },
+                });
+            } else {
+                await this.mediaService.attach(
+                    {
+                        mediaId: item.mediaId,
+                        entityType: MediaEntityType.PRODUCT,
+                        entityId: productId,
+                        role: item.role,
+                        sortOrder: item.sortOrder ?? 0,
+                    },
+
+                    tx,
+                );
+            }
+        }
+    }
+
+    private async validateProductMedia(media: ProductMediaDto[] = []) {
+        if (!media.length) { return; }
+
+        const mediaIds = media.map((item) => item.mediaId);
+
+        if (new Set(mediaIds).size !== mediaIds.length) {
+            throw new ConflictException('The same media cannot be attached to a product more than once');
+        }
+
+        const records =
+            await this.prisma.media.findMany({
+                where: {
+                    id: { in: mediaIds },
+
+                    status: {
+                        in: [MediaStatus.TEMPORARY, MediaStatus.ACTIVE],
+                    },
+                },
+
+                select: {
+                    id: true,
+                    type: true,
+                },
+            });
+
+        if (records.length !== mediaIds.length) {
+            throw new NotFoundException('One or more media files were not found');
+        }
+
+        if (records.some((media) => media.type !== MediaType.IMAGE)) {
+            throw new BadRequestException('Only images can be attached to products');
+        }
     }
 }

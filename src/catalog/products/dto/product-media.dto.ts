@@ -1,13 +1,10 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import { MediaEntityType, MediaRole } from '../../../generated/prisma/enums';
 
-export class AttachMediaDto {
+import { MediaRole } from '../../../../generated/prisma/enums';
 
-    @IsEnum(MediaEntityType)
-    entityType!: MediaEntityType;
-
+export class ProductMediaDto {
     @IsString()
-    entityId!: string;
+    mediaId!: string;
 
     @IsEnum(MediaRole)
     role!: MediaRole;

@@ -1,7 +1,7 @@
 import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProductStatus } from '../../../../generated/prisma/enums';
-import { CreateProductImageDto } from './create-product-image.dto';
+import { ProductMediaDto } from './product-media.dto';
 import { CreateProductSizeDto } from './create-product-size.dto';
 import { CreateProductAttributeDto } from './create-product-attribute.dto';
 
@@ -44,9 +44,9 @@ export class CreateProductDto {
 
     @IsArray()
     @ValidateNested({ each: true })
-    @Type(() => CreateProductImageDto)
+    @Type(() => ProductMediaDto)
     @IsOptional()
-    images?: CreateProductImageDto[];
+    media?: ProductMediaDto[];
 
     @IsArray()
     @ValidateNested({ each: true })
