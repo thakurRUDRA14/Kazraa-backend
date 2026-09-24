@@ -3,8 +3,10 @@ import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
 import { CloudinaryStorage } from './providers/cloudinary.storage';
 import { MEDIA_STORAGE } from './constants/media.tokens';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
+  imports: [JwtModule],
   providers: [
     MediaService,
 
