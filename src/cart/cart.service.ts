@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
+import { MediaRole } from '../../generated/prisma/enums';
 import { PostgresService } from '../database/postgres/postgres.service';
 
 import { AddCartItemDto } from './dto/add-cart-item.dto';
@@ -35,75 +36,100 @@ export class CartService {
         const cart = await this.getOrCreateCart(userId);
 
         const items = await this.prisma.cartItem.findMany({
-            where: {
-                cartId: cart.id,
-            },
+            where: { cartId: cart.id },
             include: {
                 productSize: {
                     include: {
                         size: true,
-                        product: {
-                            include: {
-                                images: {
-                                    include: {
-                                        media: true,
-                                    },
-                                    orderBy: {
-                                        sortOrder: 'asc',
-                                    },
-                                },
-                            },
-                        },
+                        product: true,
                     },
                 },
             },
-            orderBy: {
-                createdAt: 'asc',
-            },
+            orderBy: { createdAt: 'asc' },
         });
 
-        const subtotal = items.reduce((total, item) => total + Number(item.productSize.sellingPrice) * item.quantity, 0);
+        const productIds = items.map(
+            (item) => item.productSize.product.id,
+        );
 
+        const mediaUsages =
+            productIds.length
+                ? await this.prisma.mediaUsage.findMany({
+                    where: {
+                        entityType: 'PRODUCT',
+                        entityId: { in: productIds },
+                        role: MediaRole.PRIMARY,
+                        media: {
+                            status: { not: 'DELETED' },
+                        },
+                    },
+                    include: { media: true },
+                    orderBy: { sortOrder: 'asc' },
+                })
+                : [];
+
+        const mediaByProduct = new Map<string, typeof mediaUsages>();
+
+        for (const usage of mediaUsages) {
+            const existing = mediaByProduct.get(usage.entityId) ?? [];
+
+            existing.push(usage);
+
+            mediaByProduct.set(
+                usage.entityId,
+                existing,
+            );
+        }
+
+        const subtotal = items.reduce((total, item) => total + Number(item.productSize.sellingPrice) * item.quantity, 0);
         const totalItems = items.reduce((total, item) => total + item.quantity, 0);
 
         return {
             id: cart.id,
             status: cart.status,
-            items: items.map((item) => ({
-                id: item.id,
-                quantity: item.quantity,
 
-                productSizeId: item.productSizeId,
+            items: items.map((item) => {
+                const product = item.productSize.product;
 
-                product: {
-                    id: item.productSize.product.id,
-                    name: item.productSize.product.name,
-                    slug: item.productSize.product.slug,
-                },
+                const media = mediaByProduct.get(product.id) ?? [];
 
-                size: {
-                    id: item.productSize.size.id,
-                    name: item.productSize.size.name,
-                    shortCode: item.productSize.size.shortCode,
-                },
+                return {
+                    id: item.id,
+                    quantity: item.quantity,
 
-                sku: item.productSize.sku,
+                    productSizeId: item.productSizeId,
 
-                mrp: Number(item.productSize.mrp),
-                sellingPrice: Number(item.productSize.sellingPrice),
-                availableStock: item.productSize.availableStock,
-                total: Number(item.productSize.sellingPrice) * item.quantity,
+                    product: {
+                        id: product.id,
+                        name: product.name,
+                        slug: product.slug,
+                    },
 
-                images: item.productSize.product.images.map(
-                    (image) => ({
-                        id: image.id,
-                        url: image.media.url,
-                        altText: image.altText ?? image.media.altText,
-                        type: image.type,
-                        isPrimary: image.isPrimary,
-                    }),
-                ),
-            })),
+                    size: {
+                        id: item.productSize.size.id,
+                        name: item.productSize.size.name,
+                        shortCode: item.productSize.size.shortCode,
+                    },
+
+                    sku: item.productSize.sku,
+                    mrp: Number(item.productSize.mrp),
+                    sellingPrice: Number(item.productSize.sellingPrice),
+                    availableStock: item.productSize.availableStock,
+
+                    total: Number(item.productSize.sellingPrice) * item.quantity,
+
+                    media: media.map(
+                        (usage) => ({
+                            id: usage.media.id,
+                            url: usage.media.url,
+                            type: usage.media.type,
+                            role: usage.role,
+                            sortOrder: usage.sortOrder,
+                            altText: usage.media.altText,
+                        }),
+                    ),
+                };
+            }),
 
             summary: {
                 totalItems,
