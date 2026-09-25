@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { Prisma } from '../../generated/prisma/client';
-import { CartStatus, OrderStatus, PaymentMethod, PaymentStatus, UserRole } from '../../generated/prisma/enums';
+import { CartStatus, MediaEntityType, MediaRole, MediaStatus, OrderStatus, PaymentMethod, PaymentStatus, ProductStatus, UserRole } from '../../generated/prisma/enums';
 
 import { PostgresService } from '../database/postgres/postgres.service';
 
@@ -34,14 +34,6 @@ export class OrdersService {
                                     product: {
                                         include: {
                                             category: true,
-                                            images: {
-                                                include: {
-                                                    media: true,
-                                                },
-                                                orderBy: {
-                                                    sortOrder: 'asc',
-                                                },
-                                            },
                                         },
                                     },
                                     size: true,
@@ -73,23 +65,47 @@ export class OrdersService {
                 throw new NotFoundException('Address not found');
             }
 
-            // 3. Validate stock + calculate subtotal
+            // 3. Get primary media for all products
+            const productIds = [...new Set(cart.items.map((item) => item.productSize.product.id))];
+
+            const productMedia =
+                await tx.mediaUsage.findMany({
+                    where: {
+                        entityType: MediaEntityType.PRODUCT,
+                        entityId: { in: productIds },
+                        role: MediaRole.PRIMARY,
+                        media: { status: MediaStatus.ACTIVE },
+                    },
+
+                    include: { media: true },
+                });
+
+            const primaryMediaByProduct =
+                new Map(
+                    productMedia.map((usage) => [
+                        usage.entityId,
+                        usage.media,
+                    ]),
+                );
+
+            // 4. Validate stock + calculate subtotal
             let subtotal = new Prisma.Decimal(0);
 
-            const orderItemsData: any[] = [];
+            const orderItemsData: Prisma.OrderItemCreateWithoutOrderInput[] = [];
 
             for (const cartItem of cart.items) {
                 const productSize = cartItem.productSize;
                 const product = productSize.product;
 
                 // Product validation
-                if (!product || product.status !== 'ACTIVE' || product.deletedAt) {
+                if (!product || product.status !== ProductStatus.ACTIVE || product.deletedAt
+                ) {
                     throw new BadRequestException(`Product ${product?.name ?? ''} is no longer available`);
                 }
 
-                // Variant validation
+                // Product size validation
                 if (!productSize.isActive || productSize.deletedAt) {
-                    throw new BadRequestException(`Product size ${productSize.sku} is no longer available`,);
+                    throw new BadRequestException(`Product size ${productSize.sku} is no longer available`);
                 }
 
                 // Stock validation
@@ -97,9 +113,11 @@ export class OrdersService {
                     throw new BadRequestException(`Insufficient stock for ${product.name} - ${productSize.size.name}`,);
                 }
 
-                const itemTotal = productSize.sellingPrice.mul(cartItem.quantity,);
+                const itemTotal = productSize.sellingPrice.mul(cartItem.quantity);
 
                 subtotal = subtotal.add(itemTotal);
+
+                const primaryMedia = primaryMediaByProduct.get(product.id);
 
                 // Product snapshot
                 const productSnapshot = {
@@ -111,11 +129,15 @@ export class OrdersService {
                         id: productSize.size.id,
                         name: productSize.size.name,
                     },
-                    image: product.images?.[0]?.media?.url ?? null,
+                    mediaId: primaryMedia?.id ?? null,
                 };
 
                 orderItemsData.push({
-                    productSizeId: productSize.id,
+                    productSize: {
+                        connect: {
+                            id: productSize.id,
+                        },
+                    },
                     productSnapshot,
                     quantity: cartItem.quantity,
                     mrp: productSize.mrp,
@@ -124,23 +146,22 @@ export class OrdersService {
                 });
             }
 
-            // 4. Calculate charges
+            // 5. Calculate charges
             const shippingCharge = subtotal.greaterThanOrEqualTo(999) ? new Prisma.Decimal(0) : new Prisma.Decimal(99);
 
             const tax = new Prisma.Decimal(0);
 
             const total = subtotal.add(shippingCharge).add(tax);
 
-            // 5. Generate order number
+            // 6. Generate order number
             const orderNumber = await this.generateOrderNumber(tx);
 
-            // 6. Create order
+            // 7. Create order
             const order = await tx.order.create({
                 data: {
                     orderNumber,
                     userId,
-                    status: dto.paymentMethod === PaymentMethod.COD
-                        ? OrderStatus.CONFIRMED : OrderStatus.PENDING,
+                    status: dto.paymentMethod === PaymentMethod.COD ? OrderStatus.CONFIRMED : OrderStatus.PENDING,
 
                     subtotal,
                     shippingCharge,
@@ -182,19 +203,15 @@ export class OrdersService {
                 },
             });
 
-            // 7. Reduce stock
+            // 8. Reduce stock
             for (const cartItem of cart.items) {
                 const updated = await tx.productSize.updateMany({
                     where: {
                         id: cartItem.productSizeId,
-                        availableStock: {
-                            gte: cartItem.quantity,
-                        },
+                        availableStock: { gte: cartItem.quantity },
                     },
                     data: {
-                        availableStock: {
-                            decrement: cartItem.quantity,
-                        },
+                        availableStock: { decrement: cartItem.quantity },
                     },
                 });
 
@@ -203,7 +220,7 @@ export class OrdersService {
                 }
             }
 
-            // 8. Convert cart
+            // 9. Convert cart
             await tx.cart.update({
                 where: { id: cart.id },
                 data: { status: CartStatus.CONVERTED },
