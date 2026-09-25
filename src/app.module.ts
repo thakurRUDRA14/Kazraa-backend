@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { appConfig, authConfig, paymentConfig, cashfreeConfig, cloudinaryConfig } from './config';
+import { appConfig, authConfig, paymentConfig, cashfreeConfig, cloudinaryConfig, mediaConfig } from './config';
 
 import { AuthModule } from './auth/auth.module';
 import { PostgresModule } from './database/postgres/postgres.module';
@@ -17,7 +17,7 @@ import { MediaModule } from './media/media.module';
   imports: [ConfigModule.forRoot({
     isGlobal: true,     // Make the configuration available globally
     cache: true,
-    load: [appConfig, authConfig, paymentConfig, cashfreeConfig, cloudinaryConfig], // Load the configuration from the appConfig and authConfig files
+    load: [appConfig, authConfig, paymentConfig, cashfreeConfig, mediaConfig, cloudinaryConfig], // Load the configuration from the appConfig and authConfig files
   }),
     PostgresModule,
     UsersModule,
