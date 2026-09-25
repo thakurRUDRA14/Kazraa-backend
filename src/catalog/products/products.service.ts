@@ -367,14 +367,13 @@ export class ProductsService {
         const productIds = products.map((product) => product.id);
 
         const mediaUsages =
-            await this.prisma.mediaUsage.findMany({
-                where: {
-                    entityType: MediaEntityType.PRODUCT,
-                    entityId: { in: productIds },
+            await this.mediaService.getUsagesByEntities(
+                MediaEntityType.PRODUCT,
+                productIds,
+                {
+                    excludeDeleted: true,
                 },
-                include: { media: true },
-                orderBy: { sortOrder: 'asc' },
-            });
+            );
 
         const mediaByProduct = new Map<string, typeof mediaUsages>();
 

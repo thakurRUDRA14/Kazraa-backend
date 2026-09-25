@@ -1,14 +1,18 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
-import { MediaRole } from '../../generated/prisma/enums';
+import { MediaEntityType, MediaRole } from '../../generated/prisma/enums';
 import { PostgresService } from '../database/postgres/postgres.service';
 
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class CartService {
-    constructor(private readonly prisma: PostgresService) { }
+    constructor(
+        private readonly prisma: PostgresService,
+        private readonly mediaService: MediaService
+    ) { }
 
     // Get or create the user's active cart
     private async getOrCreateCart(userId: string) {
@@ -53,20 +57,14 @@ export class CartService {
         );
 
         const mediaUsages =
-            productIds.length
-                ? await this.prisma.mediaUsage.findMany({
-                    where: {
-                        entityType: 'PRODUCT',
-                        entityId: { in: productIds },
-                        role: MediaRole.PRIMARY,
-                        media: {
-                            status: { not: 'DELETED' },
-                        },
-                    },
-                    include: { media: true },
-                    orderBy: { sortOrder: 'asc' },
-                })
-                : [];
+            await this.mediaService.getUsagesByEntities(
+                MediaEntityType.PRODUCT,
+                productIds,
+                {
+                    role: MediaRole.PRIMARY,
+                    excludeDeleted: true
+                },
+            );
 
         const mediaByProduct = new Map<string, typeof mediaUsages>();
 

@@ -13,7 +13,7 @@ export class CreateCategoryDto {
 
     @IsUrl()
     @IsOptional()
-    imageUrl?: string;
+    mediaId?: string;
 
     @IsString()
     @IsOptional()

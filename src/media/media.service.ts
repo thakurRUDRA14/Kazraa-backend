@@ -18,6 +18,7 @@ export class MediaService {
     constructor(
         private readonly prisma: PostgresService,
         private readonly configService: ConfigService,
+
         @Inject(MEDIA_STORAGE)
         private readonly storage: MediaStorageProvider,
     ) { }
@@ -122,43 +123,94 @@ export class MediaService {
         return this.serializeMedia(media);
     }
 
-    // DELETE
-    async delete(mediaId: string) {
-        const media = await this.prisma.media.findFirst({
+    // GET ENTITY MEDIA
+    async getUsages(
+        entityType: MediaEntityType,
+        entityId: string,
+        tx?: Prisma.TransactionClient,
+    ) {
+        const db = tx ?? this.prisma;
+
+        return db.mediaUsage.findMany({
             where: {
-                id: mediaId,
-                status: { not: MediaStatus.DELETED },
+                entityType,
+                entityId,
             },
-            include: { usages: true },
+
+            include: {
+                media: true,
+            },
+
+            orderBy: {
+                sortOrder: 'asc',
+            },
         });
+    }
 
-        if (!media) {
-            throw new NotFoundException('Media not found');
+    async getUsagesByEntities(
+        entityType: MediaEntityType,
+        entityIds: string[],
+        options?: {
+            role?: MediaRole;
+            excludeDeleted?: boolean;
+        },
+        tx?: Prisma.TransactionClient,
+    ) {
+        if (!entityIds.length) {
+            return [];
         }
+        const db = tx ?? this.prisma;
 
-        // Don't delete media that is being used.
-        if (media.usages.length > 0) {
-            throw new ConflictException('Media is currently being used and cannot be deleted');
-        }
+        return db.mediaUsage.findMany({
+            where: {
+                entityType,
+                entityId: {
+                    in: entityIds,
+                },
 
-        // Delete physical file.
-        if (media.publicId) {
-            const resourceType = media.type === MediaType.VIDEO ? 'video' : 'image';
+                ...(options?.role && {
+                    role: options.role,
+                }),
 
-            await this.storage.delete(media.publicId, resourceType);
-        }
+                ...(options?.excludeDeleted && {
+                    media: {
+                        status: {
+                            not: MediaStatus.DELETED,
+                        },
+                    },
+                }),
+            },
+            include: {
+                media: true,
+            },
+            orderBy: {
+                sortOrder: 'asc',
+            },
+        });
+    }
 
-        // Soft delete database record.
-        const deletedMedia =
-            await this.prisma.media.update({
-                where: { id: media.id },
-                data: {
-                    status: MediaStatus.DELETED,
-                    deletedAt: new Date(),
+    // GET PRIMARY MEDIA
+    async getPrimary(
+        entityType: MediaEntityType,
+        entityId: string,
+        tx?: Prisma.TransactionClient,
+    ) {
+        const db = tx ?? this.prisma;
+
+        const usage =
+            await db.mediaUsage.findFirst({
+                where: {
+                    entityType,
+                    entityId,
+                    role: MediaRole.PRIMARY,
+                },
+
+                include: {
+                    media: true,
                 },
             });
 
-        return this.serializeMedia(deletedMedia);
+        return usage?.media ?? null;
     }
 
     // ATTACH
@@ -200,7 +252,15 @@ export class MediaService {
             throw new NotFoundException('Media not found');
         }
 
-        // If this exact media is already attached, update its role/order instead of creating duplicate MediaUsage.
+        // 2. Only images/videos can be attached according
+        // to the media type already stored.
+        //
+        // No entity-specific validation here.
+        // Category/Product services can enforce their
+        // own business rules if required.
+
+        // 3. Check whether this exact media is already
+        // attached to this entity.
         const existing =
             await db.mediaUsage.findFirst({
                 where: {
@@ -210,7 +270,7 @@ export class MediaService {
                 },
             });
 
-        // PRIMARY handling
+        // 4. PRIMARY handling
         if (role === MediaRole.PRIMARY) {
 
             const existingPrimary =
@@ -220,12 +280,12 @@ export class MediaService {
                         entityId,
                         role: MediaRole.PRIMARY,
 
-                        NOT: existing ? { id: existing.id } : undefined,
+                        ...(existing ? { NOT: { id: existing.id } } : {}),
                     },
                 });
 
             if (existingPrimary) {
-
+                // Move previous primary to gallery.
                 const maxGallery =
                     await db.mediaUsage.aggregate({
                         where: {
@@ -245,14 +305,14 @@ export class MediaService {
                 });
             }
 
-            // Primary should have a fixed sortOrder
+            // PRIMARY always comes first.
             sortOrder = 0;
         }
 
+        // 5. Create/update relationship
         let usage;
 
         if (existing) {
-
             usage =
                 await db.mediaUsage.update({
                     where: { id: existing.id },
@@ -262,9 +322,7 @@ export class MediaService {
                     },
                     include: { media: true },
                 });
-
         } else {
-
             usage =
                 await db.mediaUsage.create({
                     data: {
@@ -278,7 +336,7 @@ export class MediaService {
                 });
         }
 
-        // Temporary media becomes active once it is actually used.
+        // 6. Temporary media becomes active once it is actually used.
         if (media.status === MediaStatus.TEMPORARY) {
             await db.media.update({
                 where: { id: mediaId },
@@ -287,6 +345,62 @@ export class MediaService {
         }
 
         return usage;
+    }
+
+    // REPLACE PRIMARY MEDIA
+    async replacePrimary(
+        {
+            mediaId,
+            entityType,
+            entityId,
+        }: {
+            mediaId: string;
+            entityType: MediaEntityType;
+            entityId: string;
+        },
+
+        tx?: Prisma.TransactionClient,
+    ) {
+        const db = tx ?? this.prisma;
+
+        // Validate new media first.
+        const media =
+            await db.media.findFirst({
+                where: {
+                    id: mediaId,
+                    status: {
+                        in: [MediaStatus.TEMPORARY, MediaStatus.ACTIVE],
+                    },
+                },
+            });
+
+        if (!media) {
+            throw new NotFoundException('Media not found');
+        }
+
+        // ReplacePrimary is generic, so it does not decide
+        // whether IMAGE or VIDEO is valid for a particular entity.
+
+        // Remove current PRIMARY relationship.
+        await db.mediaUsage.deleteMany({
+            where: {
+                entityType,
+                entityId,
+                role: MediaRole.PRIMARY,
+            },
+        });
+
+        // Attach new primary.
+        return this.attach(
+            {
+                mediaId,
+                entityType,
+                entityId,
+                role: MediaRole.PRIMARY,
+                sortOrder: 0,
+            },
+            tx,
+        );
     }
 
     // DETACH
@@ -321,9 +435,50 @@ export class MediaService {
         return { success: true };
     }
 
+    // DELETE MEDIA
+    async delete(mediaId: string) {
+        const media =
+            await this.prisma.media.findFirst({
+                where: {
+                    id: mediaId,
+                    status: { not: MediaStatus.DELETED },
+                },
+
+                include: { usages: true },
+            });
+
+        if (!media) {
+            throw new NotFoundException('Media not found');
+        }
+
+        if (media.usages.length > 0) {
+            throw new ConflictException('Media is currently being used and cannot be deleted');
+        }
+
+        if (media.publicId) {
+            const resourceType = media.type === MediaType.VIDEO ? 'video' : 'image';
+
+            await this.storage.delete(
+                media.publicId,
+                resourceType,
+            );
+        }
+
+        const deletedMedia =
+            await this.prisma.media.update({
+                where: { id: media.id },
+
+                data: {
+                    status: MediaStatus.DELETED,
+                    deletedAt: new Date(),
+                },
+            });
+
+        return this.serializeMedia(deletedMedia);
+    }
+
     // DELETE IF UNUSED
     async deleteIfUnused(mediaId: string) {
-
         const usageCount =
             await this.prisma.mediaUsage.count({
                 where: { mediaId },
@@ -343,7 +498,6 @@ export class MediaService {
 
     // VALIDATE FILE
     private validateFile(file: MediaFile) {
-
         if (!file) {
             throw new BadRequestException('File is required');
         }
@@ -405,7 +559,6 @@ export class MediaService {
 
     // FILE NAME
     private generateFileName(originalName: string): string {
-
         const extension =
             originalName.includes('.')
                 ? originalName.substring(originalName.lastIndexOf('.'))
@@ -423,25 +576,5 @@ export class MediaService {
                     media.size !== undefined
                     ? Number(media.size) : null,
         };
-    }
-
-    async getUsages(
-        entityType: MediaEntityType,
-        entityId: string,
-    ) {
-        return this.prisma.mediaUsage.findMany({
-            where: {
-                entityType,
-                entityId,
-            },
-
-            include: {
-                media: true,
-            },
-
-            orderBy: {
-                sortOrder: 'asc',
-            },
-        });
     }
 }
