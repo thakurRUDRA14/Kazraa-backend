@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { JwtAuthModule } from '../common/jwt/jwt-auth.module';
 
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -11,7 +10,7 @@ import { CashfreeClient } from './providers/cashfree/cashfree.client';
 import { CashfreeProvider } from './providers/cashfree/cashfree.provider';
 
 @Module({
-  imports: [JwtAuthModule, ConfigModule],
+  imports: [ConfigModule],
   controllers: [PaymentsController],
   providers: [PaymentsService, PaymentProviderFactory, CashfreeClient, CashfreeProvider],
   exports: [PaymentsService],

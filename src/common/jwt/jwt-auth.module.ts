@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import type { StringValue } from 'ms';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 
+@Global()
 @Module({
     imports: [
         ConfigModule,
@@ -12,22 +13,14 @@ import { RolesGuard } from './roles.guard';
             imports: [ConfigModule],
             inject: [ConfigService],
             useFactory: (configService: ConfigService) => ({
-                secret: configService.getOrThrow<string>(
-                    'auth.accessTokenSecret',
-                ),
+                secret: configService.getOrThrow<string>('auth.accessTokenSecret'),
                 signOptions: {
-                    expiresIn: configService.getOrThrow<StringValue>(
-                        'auth.accessTokenExpiresIn',
-                    ),
+                    expiresIn: configService.getOrThrow<StringValue>('auth.accessTokenExpiresIn'),
                 },
             }),
         }),
     ],
     providers: [JwtAuthGuard, RolesGuard],
-    exports: [
-        JwtAuthGuard,
-        RolesGuard,
-        JwtModule,
-    ],
+    exports: [JwtAuthGuard, RolesGuard, JwtModule],
 })
 export class JwtAuthModule { }

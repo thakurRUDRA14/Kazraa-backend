@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { appConfig, authConfig, paymentConfig, cashfreeConfig, cloudinaryConfig, mediaConfig } from './config';
 
 import { AuthModule } from './auth/auth.module';
+import { JwtAuthModule } from './common/jwt/jwt-auth.module';
 import { PostgresModule } from './database/postgres/postgres.module';
 import { UsersModule } from './users/users.module';
 import { CatalogModule } from './catalog/catalog.module';
@@ -19,6 +20,7 @@ import { MediaModule } from './media/media.module';
     cache: true,
     load: [appConfig, authConfig, paymentConfig, cashfreeConfig, mediaConfig, cloudinaryConfig], // Load the configuration from the appConfig and authConfig files
   }),
+    JwtAuthModule,
     PostgresModule,
     UsersModule,
     AuthModule,
