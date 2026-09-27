@@ -429,12 +429,9 @@ export class ProductsService {
             throw new NotFoundException('Product not found');
         }
 
-        const media = this.mediaService.getUsages(MediaEntityType.PRODUCT, product.id);
+        const media = await this.mediaService.getUsages(MediaEntityType.PRODUCT, product.id);
 
-        return {
-            ...product,
-            media,
-        };
+        return { ...product, media };
     }
 
     // PATCH /catalog/products/:id

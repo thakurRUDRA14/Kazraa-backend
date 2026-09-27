@@ -1,12 +1,14 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { PaymentsService } from './payments.service';
 
+import { UserRole } from '../../generated/prisma/enums';
 import { JwtAuthGuard } from '../common/jwt/jwt-auth.guard';
+import { RolesGuard } from '../common/jwt/roles.guard';
+import { Roles } from '../common/jwt/roles.decorator';
 
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
-
-import { PaymentsService } from './payments.service';
 
 @Controller('payments')
 export class PaymentsController {
@@ -37,7 +39,8 @@ export class PaymentsController {
     }
 
     @Post(':orderId/refund')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     refundPayment(
         @Param('orderId') orderId: string,
         @Body() dto: RefundPaymentDto,

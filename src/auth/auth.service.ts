@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { TokenService } from './services/token.service';
+import { ConfigService } from '@nestjs/config';
 import { RegisterDto } from './dto/register.dto';
 import { LogInDto } from './dto/login.dto';
 import { AuthTokens, RegisterAuthResult } from './types/auth.types';
@@ -12,6 +13,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly tokenService: TokenService,
+    private readonly configService: ConfigService
   ) { }
 
   async register(registerDto: RegisterDto): Promise<RegisterAuthResult> {
@@ -32,7 +34,7 @@ export class AuthService {
     }
 
     // 3. Hash password
-    const hashedPassword = await bcrypt.hash(password, process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 12);
+    const hashedPassword = await bcrypt.hash(password, this.configService.getOrThrow<string>('auth.bcryptSaltRounds'));
 
     try {
       // 4. Create user

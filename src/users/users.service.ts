@@ -1,18 +1,23 @@
 import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { ConfigService } from '@nestjs/config';
 import { PostgresService } from '../database/postgres/postgres.service';
+import { UserStatus } from '../../generated/prisma/enums';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PostgresService) { }
+  constructor(
+    private readonly prisma: PostgresService,
+    private readonly configService: ConfigService
+  ) { }
 
   async findByEmail(email: string) {
     return this.prisma.user.findFirst({
       where: {
         email,
-        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
@@ -21,7 +26,7 @@ export class UsersService {
     return this.prisma.user.findFirst({
       where: {
         phone,
-        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
@@ -29,7 +34,7 @@ export class UsersService {
   async findByEmailOrPhone(identifier: string) {
     return this.prisma.user.findFirst({
       where: {
-        isDeleted: false,
+        deletedAt: null,
         OR: [
           { email: identifier },
           { phone: identifier },
@@ -42,7 +47,7 @@ export class UsersService {
     return this.prisma.user.findFirst({
       where: {
         id,
-        isDeleted: false,
+        deletedAt: null,
       },
     });
   }
@@ -70,7 +75,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false,
+        deletedAt: null,
       },
       select: {
         id: true,
@@ -95,7 +100,7 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
-        isDeleted: false,
+        deletedAt: null,
       },
     });
 
@@ -106,7 +111,7 @@ export class UsersService {
     return this.prisma.user.update({
       where: {
         id: userId,
-        isDeleted: false,
+        deletedAt: null,
       },
       data: dto,
       select: {
@@ -152,7 +157,7 @@ export class UsersService {
       throw new BadRequestException('New password must be different from current password');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.newPassword, process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 12);
+    const hashedPassword = await bcrypt.hash(dto.newPassword, this.configService.getOrThrow<string>('auth.bcryptSaltRounds'));
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -164,9 +169,7 @@ export class UsersService {
 
   async deleteMe(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+      where: { id: userId },
     });
 
     if (!user) {
@@ -174,17 +177,13 @@ export class UsersService {
     }
 
     await this.prisma.user.update({
-      where: {
-        id: userId,
-      },
+      where: { id: userId },
       data: {
-        isDeleted: true,
+        status: UserStatus.INACTIVE,
         deletedAt: new Date(),
       },
     });
 
-    return {
-      message: 'Account deleted successfully',
-    };
+    return { message: 'Account deleted successfully' };
   }
 }
