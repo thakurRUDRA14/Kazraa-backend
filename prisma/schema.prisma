@@ -331,7 +331,6 @@ model User {
 
   lastLoginAt DateTime?
 
-  isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
   resetToken       String?
