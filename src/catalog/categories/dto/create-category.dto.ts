@@ -1,4 +1,4 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateCategoryDto {
     @IsString()
@@ -11,7 +11,7 @@ export class CreateCategoryDto {
     @MaxLength(500)
     description?: string;
 
-    @IsUrl()
+    @IsString()
     @IsOptional()
     mediaId?: string;
 

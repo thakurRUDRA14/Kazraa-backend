@@ -1194,9 +1194,7 @@ export class ProductsService {
 
         // 3. Add/update requested media
         for (const item of requestedMedia) {
-            const existingUsage =
-                existing.find(
-                    (usage) => usage.mediaId === item.mediaId);
+            const existingUsage = existing.find((usage) => usage.mediaId === item.mediaId);
 
             if (existingUsage) {
                 await tx.mediaUsage.update({
