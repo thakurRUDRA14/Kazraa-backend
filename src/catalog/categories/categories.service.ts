@@ -193,6 +193,9 @@ export class CategoriesService {
         id: string,
         updateCategoryDto: UpdateCategoryDto,
     ) {
+        const { mediaId, ...categoryData } = updateCategoryDto;
+
+        // 1. Find existing category
         const existingCategory =
             await this.prisma.category.findFirst({
                 where: {
@@ -205,17 +208,17 @@ export class CategoriesService {
             throw new NotFoundException('Category not found');
         }
 
-        // Generate new slug when name changes
+        // 2. Generate new slug when name changes
         let slug = existingCategory.slug;
 
-        if (updateCategoryDto.name && updateCategoryDto.name !== existingCategory.name) {
-            const newSlug = generateSlug(updateCategoryDto.name);
+        if (categoryData.name && categoryData.name !== existingCategory.name) {
+            const newSlug = generateSlug(categoryData.name);
 
             const duplicateCategory =
                 await this.prisma.category.findFirst({
                     where: {
                         OR: [
-                            { name: updateCategoryDto.name },
+                            { name: categoryData.name },
                             { slug: newSlug },
                         ],
                         id: { not: id },
@@ -230,17 +233,17 @@ export class CategoriesService {
             slug = newSlug;
         }
 
-        // Validate parent
-        if (updateCategoryDto.parentId !== undefined) {
-            if (updateCategoryDto.parentId === id) {
+        // 3. Validate parent
+        if (categoryData.parentId !== undefined) {
+            if (categoryData.parentId === id) {
                 throw new ConflictException('A category cannot be its own parent');
             }
 
-            if (updateCategoryDto.parentId !== null) {
+            if (categoryData.parentId !== null) {
                 const parentCategory =
                     await this.prisma.category.findFirst({
                         where: {
-                            id: updateCategoryDto.parentId,
+                            id: categoryData.parentId,
                             deletedAt: null,
                         },
                     });
@@ -251,16 +254,31 @@ export class CategoriesService {
             }
         }
 
-        return this.prisma.category.update({
-            where: { id },
+        // 4. Update category
+        const category =
+            await this.prisma.category.update({
+                where: { id },
+                data: {
+                    ...categoryData,
+                    slug,
+                },
+                include: { parent: true },
+            });
 
-            data: {
-                ...updateCategoryDto,
-                slug,
-            },
+        // 5. Update media
+        if (mediaId) {
+            const usage =
+                await this.mediaService.replacePrimary({
+                    mediaId,
+                    entityType: MediaEntityType.CATEGORY,
+                    entityId: id,
+                });
+        }
 
-            include: { parent: true },
-        });
+        const media = await this.mediaService.getPrimary(MediaEntityType.CATEGORY, id);
+
+        // 6. Return both
+        return { ...category, media };
     }
 
     // DELETE /catalog/categories/:id
@@ -315,70 +333,5 @@ export class CategoriesService {
                 });
             },
         );
-    }
-
-    // PUT /catalog/categories/:id/media
-    //
-    // Replaces the category's single image.
-    async updateMedia(
-        categoryId: string,
-        mediaId: string,
-    ) {
-        const category =
-            await this.prisma.category.findFirst({
-                where: {
-                    id: categoryId,
-                    deletedAt: null,
-                },
-                select: { id: true },
-            });
-
-        if (!category) {
-            throw new NotFoundException('Category not found');
-        }
-
-        const usage =
-            await this.mediaService.replacePrimary({
-                mediaId,
-                entityType: MediaEntityType.CATEGORY,
-                entityId: categoryId,
-            });
-
-        return usage.media;
-    }
-
-    // DELETE /catalog/categories/:id/media
-    async removeMedia(categoryId: string) {
-        const category =
-            await this.prisma.category.findFirst({
-                where: {
-                    id: categoryId,
-                    deletedAt: null,
-                },
-                select: { id: true },
-            });
-
-        if (!category) {
-            throw new NotFoundException('Category not found');
-        }
-
-        const usage =
-            await this.prisma.mediaUsage.findFirst({
-                where: {
-                    entityType: MediaEntityType.CATEGORY,
-                    entityId: categoryId,
-                    role: MediaRole.PRIMARY,
-                },
-            });
-
-        if (!usage) {
-            throw new NotFoundException('Category image not found');
-        }
-
-        await this.prisma.mediaUsage.delete({
-            where: { id: usage.id },
-        });
-
-        return { success: true };
     }
 }
