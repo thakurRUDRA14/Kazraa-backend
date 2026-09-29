@@ -1,98 +1,228 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Kazraa Backend — Technical Documentation
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## Project Purpose
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Kazraa Backend is the server-side application for the **Kazraa Fashion** e-commerce platform. It provides REST APIs for customer-facing shopping workflows (browse, cart, order, pay) and admin-facing catalog/order management. The application is built for the Indian fashion market with INR as the default currency, Indian addresses, and Cashfree as the payment gateway.
 
-## Description
+## Main Features
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Domain | Capabilities |
+| --- | --- |
+| **Auth** | Email/phone registration, login, JWT access + refresh tokens, logout |
+| **Users** | Profile management, password change, soft-delete |
+| **Addresses** | CRUD with default-address logic, soft-delete |
+| **Catalog** | Categories (hierarchical), Products (with sizes, attributes, media), Size Types, Sizes, Attributes + Options |
+| **Media** | Upload to Cloudinary, polymorphic attachment to entities (Product, Category, etc.), soft-delete |
+| **Cart** | Get-or-create active cart, add/update/remove items, stock validation |
+| **Orders** | Cart-to-order conversion, order number generation, stock decrement, status transitions, cancellation with stock restore, customer returns, admin RTO |
+| **Payments** | Provider-agnostic architecture, Cashfree implementation, payment creation/verification, webhooks, refunds |
 
-## Project setup
+## Technology Stack
 
-```bash
-$ pnpm install
+| Layer | Technology |
+| --- | --- |
+| Runtime | Node.js |
+| Framework | NestJS 11 |
+| Language | TypeScript 5 |
+| ORM | Prisma 7 (with `@prisma/adapter-pg` driver adapter) |
+| Database | PostgreSQL |
+| Auth | JWT (`@nestjs/jwt`), bcrypt |
+| Payment Gateway | Cashfree PG (`cashfree-pg` SDK) |
+| File Storage | Cloudinary (`cloudinary` SDK) |
+| Validation | class-validator, class-transformer |
+| Package Manager | pnpm 12 |
+
+## Architecture Style
+
+Modular monolith following the NestJS module pattern:
+
+```
+Controller → Service → Prisma (PostgresService) → PostgreSQL
 ```
 
-## Compile and run the project
+All modules are registered in a single `AppModule`. Cross-cutting concerns (JWT, database) are provided via global modules. External services (Cloudinary, Cashfree) are abstracted behind provider interfaces for swappability.
 
-```bash
-# development
-$ pnpm run start
+## High-Level Architecture
 
-# watch mode
-$ pnpm run start:dev
+```mermaid
+graph TD
+    Client[Client / Frontend]
 
-# production mode
-$ pnpm run start:prod
+    Client -->|HTTP| API[NestJS Application]
+
+    API --> AuthModule[Auth Module]
+    API --> UsersModule[Users Module]
+    API --> CatalogModule[Catalog Module]
+    API --> CartModule[Cart Module]
+    API --> OrdersModule[Orders Module]
+    API --> PaymentsModule[Payments Module]
+    API --> MediaModule[Media Module]
+
+    AuthModule --> UsersModule
+    CartModule --> MediaModule
+    CatalogModule --> MediaModule
+    OrdersModule -.->|reads media at order time| DB
+
+    PaymentsModule --> CashfreeProvider[Cashfree PG]
+    MediaModule --> CloudinaryProvider[Cloudinary]
+
+    AuthModule --> DB[(PostgreSQL)]
+    UsersModule --> DB
+    CatalogModule --> DB
+    CartModule --> DB
+    OrdersModule --> DB
+    PaymentsModule --> DB
+    MediaModule --> DB
 ```
 
-## Run tests
+## Module Overview
+
+| Module | Path | Responsibility |
+| --- | --- | --- |
+| `AppModule` | `src/app.module.ts` | Root module, loads config and all feature modules |
+| `JwtAuthModule` | `src/common/jwt/` | Global JWT configuration, auth guard, roles guard |
+| `PostgresModule` | `src/database/postgres/` | Global Prisma client wrapper |
+| `AuthModule` | `src/auth/` | Registration, login, token management, logout |
+| `UsersModule` | `src/users/` | User profile, addresses |
+| `CatalogModule` | `src/catalog/` | Categories, products, sizes, size-types, attributes |
+| `CartModule` | `src/cart/` | Shopping cart operations |
+| `OrdersModule` | `src/orders/` | Order lifecycle, returns, RTO |
+| `PaymentsModule` | `src/payments/` | Payment creation, verification, webhooks, refunds |
+| `MediaModule` | `src/media/` | File upload, polymorphic media attachment, Cloudinary storage |
+
+## External Services
+
+| Service | Purpose | SDK |
+| --- | --- | --- |
+| **Cashfree PG** | Online payment processing | `cashfree-pg` v6 |
+| **Cloudinary** | Image/video storage and CDN | `cloudinary` v2 |
+
+## Database
+
+PostgreSQL accessed through Prisma ORM 7 with the `@prisma/adapter-pg` driver adapter. Schema defined in `prisma/schema.prisma` with 24 models.
+
+## Authentication
+
+JWT-based with separate access and refresh tokens. Access tokens are sent via `Authorization: Bearer` header. Refresh tokens are stored as HTTP-only cookies and hashed (SHA-256) before database storage.
+
+## Payment System
+
+Provider-agnostic design with a factory pattern. Currently only Cashfree is implemented. Razorpay is defined in the enum but throws "not implemented" at runtime.
+
+## Frontend Communication
+
+The backend exposes a RESTful JSON API. No global API prefix is applied in `main.ts` (the `API_PREFIX` config is registered but not used). CORS is not explicitly configured. Cookies are used for refresh tokens (`path: /auth`).
+
+## How to Run
 
 ```bash
-# unit tests
-$ pnpm run test
+# 1. Install dependencies
+pnpm install
 
-# e2e tests
-$ pnpm run test:e2e
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your credentials
 
-# test coverage
-$ pnpm run test:cov
+# 3. Generate Prisma client
+pnpm prisma generate
+
+# 4. Run database migrations
+pnpm prisma migrate deploy
+
+# 5. Start development server
+pnpm start:dev
+
+# 6. Production build
+pnpm build
+pnpm start:prod
 ```
 
-## Deployment
+## Required Environment Variables
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+See [configuration.md](./configuration.md) for the full table.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+```env
+NODE_ENV=development
+PORT=3000
+API_PREFIX=api
+DATABASE_URL=<your-database-url>
+JWT_ACCESS_SECRET=<your-secret>
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=<your-secret>
+JWT_REFRESH_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+CASHFREE_ENVIRONMENT=SANDBOX
+CASHFREE_APP_ID=<your-cashfree-app-id>
+CASHFREE_SECRET_KEY=<your-cashfree-secret-key>
+PAYMENT_RETURN_URL=<your-url>
+PAYMENT_WEBHOOK_URL=<your-url>
+CLOUDINARY_CLOUD_NAME=<your-cloud-name>
+CLOUDINARY_API_KEY=<your-api-key>
+CLOUDINARY_API_SECRET=<your-api-secret>
+MEDIA_MAX_IMAGE_SIZE_MB=10
+MEDIA_MAX_VIDEO_SIZE_MB=50
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Important Commands
 
-## Resources
+| Command | Description |
+| --- | --- |
+| `pnpm start:dev` | Start dev server with watch mode |
+| `pnpm start:debug` | Start with debug + watch |
+| `pnpm build` | Compile TypeScript |
+| `pnpm start:prod` | Run compiled JS (`dist/src/main.js`) |
+| `pnpm lint` | Lint and auto-fix |
+| `pnpm format` | Prettier format |
+| `pnpm test` | Run unit tests |
+| `pnpm prisma generate` | Regenerate Prisma Client |
+| `pnpm prisma migrate dev` | Create/apply dev migrations |
 
-Check out a few resources that may come in handy when working with NestJS:
+---
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Documentation Index
 
-## Support
+| Document | Description |
+| --- | --- |
+| [Architecture](./architecture.md) | System architecture, layers, patterns |
+| [Project Structure](./project-structure.md) | File/folder organization |
+| [Application Flow](./application-flow.md) | Request lifecycle, startup |
+| [Authentication](./authentication.md) | Auth lifecycle, JWT, guards |
+| [Database](./database.md) | Prisma schema, models, ER diagram |
+| [API Reference](./api.md) | All endpoints grouped by module |
+| [Configuration](./configuration.md) | Environment variables |
+| [Error Handling](./error-handling.md) | Exception strategy |
+| [Integrations](./integrations.md) | Cashfree, Cloudinary |
+| [Deployment](./deployment.md) | Build, deploy, hosting |
+| [Known Issues](./known-issues.md) | Bugs, concerns, suggestions |
+| **Module Docs** | |
+| [Auth Module](./modules/auth.md) | Registration, login, tokens |
+| [Users Module](./modules/users.md) | Profile, addresses |
+| [Catalog Module](./modules/catalog.md) | Products, categories, sizes, attributes |
+| [Cart Module](./modules/cart.md) | Shopping cart |
+| [Orders Module](./modules/orders.md) | Order lifecycle |
+| [Payments Module](./modules/payments.md) | Payment architecture |
+| [Media Module](./modules/media.md) | File upload, attachment |
+| **Workflow Docs** | |
+| [User Registration](./workflows/user-registration.md) | Full registration flow |
+| [Login](./workflows/login.md) | Login + token issuance |
+| [Order Creation](./workflows/order-creation.md) | Cart → Order conversion |
+| [Payment](./workflows/payment.md) | Payment creation → verification |
+| [Order Cancellation](./workflows/order-cancellation.md) | Cancel + stock restore |
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+---
 
-## Stay in touch
+## Documentation Coverage
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Area | Covered |
+| --- | --- |
+| All modules | ✅ |
+| All API endpoints | ✅ |
+| Database schema (all 24 models) | ✅ |
+| Authentication lifecycle | ✅ |
+| Payment architecture | ✅ |
+| Media system | ✅ |
+| Order workflow | ✅ |
+| Configuration | ✅ |
+| Error handling | ✅ |
+| Known issues | ✅ |
+| Collections module (stub only) | ✅ Documented as unimplemented |
