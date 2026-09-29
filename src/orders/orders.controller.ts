@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nest
 
 import { JwtAuthGuard } from '../common/jwt/jwt-auth.guard';
 import { OrdersService } from './orders.service';
+import { CriticalRateLimit, MutationRateLimit, SensitiveRateLimit } from '../common/decorators/rate-limit.decorator';
 
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateReturnRequestDto } from './dto/create-return-request.dto';
@@ -18,6 +19,7 @@ export class OrdersController {
 
     // CUSTOMER
     @Post()
+    @SensitiveRateLimit()
     createOrder(
         @Req() req,
         @Body() dto: CreateOrderDto,
@@ -46,6 +48,7 @@ export class OrdersController {
 
     // Role is passed to service to check if the user is admin or customer. Admin can cancel any order, customer can only cancel their own order.
     @Patch(':id/cancel')
+    @CriticalRateLimit()
     cancelOrder(
         @Req() req,
         @Param('id') orderId: string,
@@ -58,6 +61,7 @@ export class OrdersController {
     }
 
     @Post(':id/return')
+    @CriticalRateLimit()
     requestReturn(
         @Req() req,
         @Param('id') orderId: string,
@@ -86,6 +90,7 @@ export class OrdersController {
     }
 
     @Patch(':id/status')
+    @MutationRateLimit()
     @UseGuards(RolesGuard)
     @Roles(UserRole.ADMIN)
     updateOrderStatus(
@@ -99,6 +104,7 @@ export class OrdersController {
     }
 
     @Post(':id/rto')
+    @MutationRateLimit()
     @UseGuards(RolesGuard)
     @Roles(UserRole.ADMIN)
     createRto(

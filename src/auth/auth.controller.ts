@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Req, UnauthorizedException, Res } from '@nestjs/common';
 import { type Response, type Request } from 'express';
 import { AuthService } from './auth.service';
+import { CriticalRateLimit, SensitiveRateLimit } from '../common/decorators/rate-limit.decorator';
 import { AccessTokenResponseDto, AuthResponseDto } from './dto/auth-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LogInDto } from './dto/login.dto';
@@ -11,6 +12,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @Post('register')
+  @CriticalRateLimit()
   async register(
     @Body() registerDto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
@@ -38,6 +40,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @CriticalRateLimit()
   async logIn(
     @Body() logInDto: LogInDto,
     @Res({ passthrough: true }) res: Response,
@@ -59,6 +62,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @SensitiveRateLimit()
   async refresh(@Req() req: Request) {
     const refreshToken = req.cookies?.refreshToken;
 
@@ -70,6 +74,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @SensitiveRateLimit()
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,

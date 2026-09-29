@@ -12,6 +12,7 @@ import { UserRole } from '../../generated/prisma/enums';
 
 import { type AuthenticatedRequest } from '../common/types/authenticated-request';
 import { type MediaFile } from './interfaces/media-file.interface';
+import { MutationRateLimit, SensitiveRateLimit } from '../common/decorators/rate-limit.decorator';
 
 @Controller('media')
 @UseGuards(JwtAuthGuard)
@@ -24,6 +25,7 @@ export class MediaController {
      * purpose: PRODUCT
      */
     @Post('upload')
+    @SensitiveRateLimit()
     @UseGuards(RolesGuard)
     @Roles(UserRole.ADMIN)
     @UseInterceptors(FileInterceptor('file'))
@@ -60,6 +62,7 @@ export class MediaController {
 
     //  Delete media from storage and soft-delete its DB record.
     @Delete(':id')
+    @MutationRateLimit()
     @UseGuards(RolesGuard)
     @Roles(UserRole.ADMIN)
     delete(@Param('id') id: string) {

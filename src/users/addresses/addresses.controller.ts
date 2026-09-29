@@ -4,6 +4,7 @@ import { AddressesService } from './addresses.service';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { JwtAuthGuard } from '../../common/jwt/jwt-auth.guard';
+import { MutationRateLimit } from '../../common/decorators/rate-limit.decorator';
 
 @Controller('users/me/addresses')
 @UseGuards(JwtAuthGuard)
@@ -16,6 +17,7 @@ export class AddressesController {
     }
 
     @Post()
+    @MutationRateLimit()
     async create(
         @Req() req: any,
         @Body() dto: CreateAddressDto,
@@ -27,6 +29,7 @@ export class AddressesController {
     }
 
     @Patch(':id')
+    @MutationRateLimit()
     async update(
         @Req() req: any,
         @Param('id') id: string,
@@ -40,6 +43,7 @@ export class AddressesController {
     }
 
     @Delete(':id')
+    @MutationRateLimit()
     async remove(
         @Req() req: any,
         @Param('id') id: string,

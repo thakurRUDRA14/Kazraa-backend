@@ -1,10 +1,12 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 
 import { UserRole } from '../../generated/prisma/enums';
 import { JwtAuthGuard } from '../common/jwt/jwt-auth.guard';
 import { RolesGuard } from '../common/jwt/roles.guard';
 import { Roles } from '../common/jwt/roles.decorator';
+import { CriticalRateLimit, SensitiveRateLimit } from '../common/decorators/rate-limit.decorator';
 
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
@@ -15,6 +17,7 @@ export class PaymentsController {
     constructor(private readonly paymentsService: PaymentsService) { }
 
     @Post()
+    @SensitiveRateLimit()
     @UseGuards(JwtAuthGuard)
     createPayment(
         @Req() req: any,
@@ -27,6 +30,7 @@ export class PaymentsController {
     }
 
     @Post('verify')
+    @SensitiveRateLimit()
     @UseGuards(JwtAuthGuard)
     verifyPayment(
         @Req() req: any,
@@ -39,6 +43,7 @@ export class PaymentsController {
     }
 
     @Post(':orderId/refund')
+    @CriticalRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     refundPayment(
@@ -53,6 +58,7 @@ export class PaymentsController {
     }
 
     @Post('webhook/cashfree')
+    @SkipThrottle()
     handleCashfreeWebhook(@Req() req: Request & { rawBody: Buffer }) {
         return this.paymentsService.handleCashfreeWebhook({
             rawBody: req.rawBody,

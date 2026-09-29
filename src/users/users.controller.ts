@@ -4,6 +4,7 @@ import { UsersService } from './users.service';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { CriticalRateLimit, MutationRateLimit } from '../common/decorators/rate-limit.decorator';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -16,6 +17,7 @@ export class UsersController {
     }
 
     @Patch('me')
+    @MutationRateLimit()
     updateMe(
         @Req() req: AuthenticatedRequest,
         @Body() dto: UpdateUserDto,
@@ -24,18 +26,17 @@ export class UsersController {
     }
 
     @Delete('me')
+    @CriticalRateLimit()
     deleteMe(@Req() req: AuthenticatedRequest) {
         return this.usersService.deleteMe(req.user.sub);
     }
 
     @Patch('me/password')
-    @UseGuards(JwtAuthGuard)
+    @CriticalRateLimit()
     changePassword(
         @Req() req,
         @Body() dto: ChangePasswordDto,
     ) {
         return this.usersService.changePassword(req.user.sub, dto);
     }
-
-
 }

@@ -22,6 +22,9 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.getHttpAdapter()
+    .getInstance()
+    .set('trust proxy', 1);
   app.use(cookieParser());
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }

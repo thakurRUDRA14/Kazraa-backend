@@ -6,6 +6,7 @@ import { CartService } from './cart.service';
 import { type AuthenticatedRequest } from '../common/types/authenticated-request';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { MutationRateLimit } from '../common/decorators/rate-limit.decorator';
 
 @Controller('cart')
 @UseGuards(JwtAuthGuard)
@@ -18,6 +19,7 @@ export class CartController {
     }
 
     @Post('items')
+    @MutationRateLimit()
     async addItem(
         @Req() req: AuthenticatedRequest,
         @Body() dto: AddCartItemDto,
@@ -29,6 +31,7 @@ export class CartController {
     }
 
     @Patch('items/:id')
+    @MutationRateLimit()
     async updateItem(
         @Req() req: AuthenticatedRequest,
         @Param('id') itemId: string,
@@ -42,6 +45,7 @@ export class CartController {
     }
 
     @Delete('items/:id')
+    @MutationRateLimit()
     async removeItem(
         @Req() req: AuthenticatedRequest,
         @Param('id') itemId: string,
@@ -53,6 +57,7 @@ export class CartController {
     }
 
     @Delete()
+    @MutationRateLimit()
     async clearCart(@Req() req: AuthenticatedRequest) {
         return this.cartService.clearCart(req.user.sub);
     }

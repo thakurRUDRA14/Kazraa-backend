@@ -13,13 +13,22 @@ import { CartModule } from './cart/cart.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { MediaModule } from './media/media.module';
+import { minutes, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
-  imports: [ConfigModule.forRoot({
-    isGlobal: true,     // Make the configuration available globally
-    cache: true,
-    load: [appConfig, authConfig, paymentConfig, cashfreeConfig, mediaConfig, cloudinaryConfig], // Load the configuration from the appConfig and authConfig files
-  }),
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,     // Make the configuration available globally
+      cache: true,
+      load: [appConfig, authConfig, paymentConfig, cashfreeConfig, mediaConfig, cloudinaryConfig], // Load the configuration from the appConfig and authConfig files
+    }),
+    ThrottlerModule.forRoot([
+      {
+        limit: 100,  // max 100 requests
+        ttl: minutes(1), // 60 seconds
+      },
+    ]),
     JwtAuthModule,
     PostgresModule,
     UsersModule,
@@ -31,6 +40,9 @@ import { MediaModule } from './media/media.module';
     MediaModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, {
+    provide: APP_GUARD,
+    useClass: ThrottlerGuard,
+  }],
 })
 export class AppModule { }

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } fro
 
 import { UserRole } from '../../../generated/prisma/enums';
 import { Roles } from '../../common/jwt/roles.decorator';
+import { MutationRateLimit, PublicRateLimit } from '../../common/decorators/rate-limit.decorator';
 import { JwtAuthGuard } from '../../common/jwt/jwt-auth.guard';
 import { RolesGuard } from '../../common/jwt/roles.guard';
 
@@ -22,11 +23,13 @@ export class ProductsController {
     constructor(private readonly productsService: ProductsService) { }
 
     @Get()
+    @PublicRateLimit()
     findAll() {
         return this.productsService.findAll();
     }
 
     @Get(':id')
+    @PublicRateLimit()
     findOne(@Param('id') id: string) {
         return this.productsService.findOne(id);
     }
@@ -39,6 +42,7 @@ export class ProductsController {
     }
 
     @Patch(':id')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     update(
@@ -52,6 +56,7 @@ export class ProductsController {
     }
 
     @Delete(':id')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     remove(@Param('id') id: string) {
@@ -59,6 +64,7 @@ export class ProductsController {
     }
 
     @Put(':productId/media')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     async updateMedia(
@@ -72,6 +78,7 @@ export class ProductsController {
     }
 
     @Post(':productId/sizes')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     createSize(
@@ -85,6 +92,7 @@ export class ProductsController {
     }
 
     @Patch(':productId/sizes/:productSizeId')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     updateSize(
@@ -100,6 +108,7 @@ export class ProductsController {
     }
 
     @Delete(':productId/sizes/:productSizeId')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     removeSize(
@@ -113,6 +122,7 @@ export class ProductsController {
     }
 
     @Post(':productId/attributes')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     createAttribute(
@@ -127,6 +137,7 @@ export class ProductsController {
     }
 
     @Patch(':productId/attributes/:attributeId')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     updateAttribute(
@@ -143,6 +154,7 @@ export class ProductsController {
     }
 
     @Delete(':productId/attributes/:attributeId')
+    @MutationRateLimit()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     removeAttribute(
